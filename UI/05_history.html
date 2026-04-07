@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ImageProc — Historial</title>
+  <link rel="stylesheet" href="styles.css">
+  <style>
+    .body { flex: 1; padding: 28px 36px; overflow-y: auto; }
+    .stats-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 28px; }
+    .stat { background: var(--bg2); border: 0.5px solid var(--border); border-radius: 12px; padding: 16px 20px; }
+    .stat-label { font-size: 10px; font-weight: 700; color: var(--text3); letter-spacing: 1px; margin-bottom: 6px; }
+    .stat-val { font-size: 26px; font-weight: 800; color: var(--text); }
+    .stat-val.green  { color: var(--green); }
+    .stat-val.amber  { color: var(--amber); }
+    .stat-val.accent { color: var(--accent); }
+    .table-wrap { background: var(--bg2); border: 0.5px solid var(--border); border-radius: 14px; overflow: hidden; }
+    table { width: 100%; border-collapse: collapse; }
+    thead tr { background: var(--bg3); border-bottom: 0.5px solid var(--border); }
+    thead th { padding: 12px 16px; text-align: left; font-size: 10px; font-weight: 700; color: var(--text3); letter-spacing: 1px; white-space: nowrap; }
+    tbody tr { border-bottom: 0.5px solid var(--border); cursor: pointer; transition: background 0.1s; }
+    tbody tr:last-child { border-bottom: none; }
+    tbody tr:hover { background: var(--bg3); }
+    td { padding: 13px 16px; font-size: 13px; color: var(--text); vertical-align: middle; }
+    .lote-id { font-weight: 700; color: var(--accent); font-size: 14px; }
+    .progress-mini { background: var(--bg3); border-radius: 20px; height: 4px; width: 64px; overflow: hidden; display: inline-block; vertical-align: middle; margin-right: 7px; }
+    .progress-mini-bar { height: 100%; background: var(--green); border-radius: 20px; }
+    .progress-mini-bar.amber { background: var(--amber); }
+    .action-btns { display: flex; gap: 7px; }
+    .btn-sm { background: var(--bg3); border: 0.5px solid var(--border2); border-radius: 7px; padding: 6px 12px; font-size: 11px; font-weight: 600; color: var(--accent); cursor: pointer; white-space: nowrap; }
+    .btn-sm.dim { color: var(--text3); cursor: not-allowed; }
+    .filter-btn { background: var(--bg3); border: 0.5px solid var(--border); border-radius: 9px; padding: 9px 16px; font-size: 14px; color: var(--text2); cursor: pointer; display: flex; align-items: center; gap: 7px; }
+    .filter-btn svg { width: 13px; height: 13px; }
+    .btn-new { background: var(--accent); border: none; border-radius: 9px; padding: 9px 20px; font-size: 14px; font-weight: 700; color: #fff; cursor: pointer; }
+  </style>
+</head>
+<body>
+<div class="layout">
+  <aside class="sidebar">
+    <div class="logo">
+      <div class="logo-icon"><svg viewBox="0 0 22 22" fill="none"><rect x="2" y="2" width="8" height="8" rx="2" fill="#818cf8"/><rect x="12" y="2" width="8" height="8" rx="2" fill="#818cf8" opacity=".4"/><rect x="2" y="12" width="8" height="8" rx="2" fill="#818cf8" opacity=".4"/><rect x="12" y="12" width="8" height="8" rx="2" fill="#818cf8"/></svg></div>
+      <div><div class="logo-text">ImageProc</div><div class="logo-sub">Sistema Distribuido</div></div>
+    </div>
+    <div class="nav-section-label">NAVEGACIÓN</div>
+    <div class="nav-item"><svg viewBox="0 0 17 17" fill="currentColor"><circle cx="8.5" cy="8.5" r="7" stroke="currentColor" stroke-width="1.5" fill="none"/><circle cx="8.5" cy="8.5" r="3" fill="currentColor"/></svg>Acceso</div>
+    <div class="nav-item"><svg viewBox="0 0 17 17" fill="currentColor"><rect x="2" y="3" width="13" height="2" rx="1"/><rect x="2" y="7.5" width="10" height="2" rx="1"/><rect x="2" y="12" width="7" height="2" rx="1"/></svg>Nueva solicitud</div>
+    <div class="nav-item"><svg viewBox="0 0 17 17" fill="currentColor"><rect x="1" y="4" width="15" height="10" rx="2" stroke="currentColor" stroke-width="1.5" fill="none"/><path d="M6 8.5l2 2 3-3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" fill="none"/></svg>Estado</div>
+    <div class="nav-item"><svg viewBox="0 0 17 17" fill="currentColor"><path d="M8.5 2v9M5 8l3.5 3.5L12 8" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" fill="none"/><path d="M2 13h13" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>Descargas</div>
+    <div class="nav-item active"><svg viewBox="0 0 17 17" fill="currentColor"><path d="M8.5 3v5l3 2" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" fill="none"/><circle cx="8.5" cy="8.5" r="6.5" stroke="currentColor" stroke-width="1.5" fill="none"/></svg>Historial</div>
+    <div class="sidebar-footer"><div class="user-pill"><div class="avatar">AU</div><div><div class="user-name">Admin Usuario</div><div class="user-role">Administrador</div></div></div></div>
+  </aside>
+  <div class="content">
+    <div class="topbar">
+      <div><div class="topbar-title">Historial de solicitudes</div><div class="topbar-sub">Todas las solicitudes de procesamiento</div></div>
+      <div class="topbar-actions">
+        <input class="search" placeholder="Buscar por ID o estado...">
+        <button class="filter-btn"><svg viewBox="0 0 13 13" fill="none"><path d="M1 3h11M3 6.5h7M5 10h3" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>Filtrar</button>
+        <button class="btn-new">+ Nueva solicitud</button>
+      </div>
+    </div>
+    <div class="body">
+      <div class="stats-row">
+        <div class="stat"><div class="stat-label">TOTAL LOTES</div><div class="stat-val">24</div></div>
+        <div class="stat"><div class="stat-label">COMPLETADOS</div><div class="stat-val green">19</div></div>
+        <div class="stat"><div class="stat-label">EN PROGRESO</div><div class="stat-val amber">3</div></div>
+        <div class="stat"><div class="stat-label">IMGS PROCESADAS</div><div class="stat-val accent">317</div></div>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>LOTE #</th><th>FECHA</th><th>IMÁGENES</th><th>PROGRESO</th><th>ESTADO</th><th>DURACIÓN</th><th>NODOS</th><th>ACCIONES</th></tr></thead>
+          <tbody id="tbody"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+<script>
+const rows=[
+  {id:2041,date:'26 mar 2026',imgs:5,done:3,status:'En progreso',dur:'—',nodes:'Nodo-01, 02, 03'},
+  {id:2038,date:'24 mar 2026',imgs:3,done:3,status:'Completado',dur:'8.3 seg',nodes:'Nodo-01, 02'},
+  {id:2031,date:'21 mar 2026',imgs:8,done:8,status:'Completado',dur:'21.7 seg',nodes:'Nodo-01, 02, 04'},
+  {id:2024,date:'18 mar 2026',imgs:2,done:0,status:'Fallido',dur:'3.1 seg',nodes:'Nodo-03'},
+  {id:2019,date:'15 mar 2026',imgs:6,done:6,status:'Completado',dur:'14.2 seg',nodes:'Nodo-01, 02'},
+  {id:2012,date:'12 mar 2026',imgs:4,done:4,status:'Completado',dur:'9.8 seg',nodes:'Nodo-02, 04'},
+  {id:2005,date:'10 mar 2026',imgs:10,done:10,status:'Completado',dur:'28.5 seg',nodes:'Nodo-01, 02, 03, 04'},
+  {id:1998,date:'07 mar 2026',imgs:1,done:1,status:'Completado',dur:'2.1 seg',nodes:'Nodo-01'},
+];
+const chipClass={Completado:'chip-green','En progreso':'chip-amber',Fallido:'chip-red'};
+const tbody=document.getElementById('tbody');
+rows.forEach(r=>{
+  const pct=r.imgs>0?Math.round(r.done/r.imgs*100):0;
+  const isAmber=r.status==='En progreso';
+  const done=r.status==='Completado';
+  const tr=document.createElement('tr');
+  tr.innerHTML=`<td class="lote-id">#${r.id}</td><td class="mono">${r.date}</td><td>${r.imgs} imgs</td><td><div style="display:flex;align-items:center;gap:7px"><div class="progress-mini"><div class="progress-mini-bar${isAmber?' amber':''}" style="width:${pct}%"></div></div><span style="font-size:11px;color:var(--text2)">${pct}%</span></div></td><td><span class="chip ${chipClass[r.status]}">${r.status}</span></td><td class="muted">${r.dur}</td><td style="font-size:11px;color:var(--text2)">${r.nodes}</td><td><div class="action-btns"><button class="btn-sm">Ver detalle</button><button class="btn-sm${done?'':' dim'}" ${done?'':'disabled'}>ZIP${done?' ↓':''}</button></div></td>`;
+  tbody.appendChild(tr);
+});
+</script>
+</body>
+</html>

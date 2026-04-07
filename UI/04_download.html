@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ImageProc — Descargas</title>
+  <link rel="stylesheet" href="styles.css">
+  <style>
+    .body { flex: 1; display: grid; grid-template-columns: 1fr 300px; overflow: hidden; min-height: 0; }
+    .panel-left { padding: 28px 36px; overflow-y: auto; }
+    .batch-info { display: flex; align-items: center; gap: 20px; flex-wrap: wrap; margin-bottom: 24px; padding: 16px 20px; background: var(--bg2); border: 0.5px solid var(--border); border-radius: 12px; }
+    .batch-item { display: flex; flex-direction: column; gap: 2px; }
+    .batch-label { font-size: 10px; color: var(--text3); letter-spacing: 0.8px; font-weight: 600; }
+    .batch-val { font-size: 15px; font-weight: 700; color: var(--text); }
+    .batch-sep { width: 0.5px; height: 32px; background: var(--border); }
+    .file-list { display: flex; flex-direction: column; gap: 8px; }
+    .file-row { background: var(--bg2); border: 0.5px solid var(--border); border-radius: 12px; padding: 14px 18px; display: flex; align-items: center; gap: 14px; }
+    .file-row.ready { border-color: var(--green-border); }
+    .file-row.pending { opacity: 0.45; }
+    .file-ext { width: 46px; height: 46px; background: var(--bg3); border: 0.5px solid var(--border2); border-radius: 10px; display: flex; align-items: center; justify-content: center; font-size: 10px; font-weight: 800; color: var(--accent); letter-spacing: 0.5px; flex-shrink: 0; }
+    .file-ext.dim { color: var(--text3); }
+    .file-info { flex: 1; min-width: 0; }
+    .file-name { font-size: 14px; font-weight: 600; color: var(--text); margin-bottom: 3px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .file-name.dim { color: var(--text2); }
+    .file-meta { font-size: 12px; color: var(--text2); }
+    .file-size { font-size: 12px; color: var(--text3); margin-left: 8px; }
+    .btn-dl { background: var(--bg3); border: 0.5px solid var(--border2); border-radius: 8px; padding: 7px 14px; font-size: 12px; font-weight: 600; color: var(--accent); cursor: pointer; display: flex; align-items: center; gap: 6px; white-space: nowrap; flex-shrink: 0; }
+    .btn-dl svg { width: 12px; height: 12px; }
+    .btn-dl.disabled { color: var(--text3); cursor: not-allowed; }
+    .stat-cards { display: flex; flex-direction: column; gap: 10px; margin-bottom: 20px; }
+    .stat-card { background: var(--bg3); border: 0.5px solid var(--border); border-radius: 10px; padding: 13px 16px; display: flex; align-items: center; justify-content: space-between; }
+    .stat-label { font-size: 12px; color: var(--text2); }
+    .stat-val { font-size: 16px; font-weight: 700; color: var(--text); }
+    .stat-val.green { color: var(--green); }
+    .stat-val.accent { color: var(--accent); }
+    .zip-card { background: var(--accent-glow); border: 0.5px solid var(--border2); border-radius: 12px; padding: 18px; margin-bottom: 16px; }
+    .zip-label { font-size: 11px; color: var(--text2); margin-bottom: 6px; }
+    .zip-size { font-size: 22px; font-weight: 800; color: var(--accent); margin-bottom: 14px; }
+    .btn-zip { width: 100%; background: var(--accent); border: none; border-radius: 9px; padding: 12px; font-size: 14px; font-weight: 700; color: #fff; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 7px; }
+    .btn-zip svg { width: 14px; height: 14px; }
+    .zip-note { font-size: 12px; color: var(--text3); line-height: 1.6; }
+  </style>
+</head>
+<body>
+<div class="layout">
+  <aside class="sidebar">
+    <div class="logo">
+      <div class="logo-icon"><svg viewBox="0 0 22 22" fill="none"><rect x="2" y="2" width="8" height="8" rx="2" fill="#818cf8"/><rect x="12" y="2" width="8" height="8" rx="2" fill="#818cf8" opacity=".4"/><rect x="2" y="12" width="8" height="8" rx="2" fill="#818cf8" opacity=".4"/><rect x="12" y="12" width="8" height="8" rx="2" fill="#818cf8"/></svg></div>
+      <div><div class="logo-text">ImageProc</div><div class="logo-sub">Sistema Distribuido</div></div>
+    </div>
+    <div class="nav-section-label">NAVEGACIÓN</div>
+    <div class="nav-item"><svg viewBox="0 0 17 17" fill="currentColor"><circle cx="8.5" cy="8.5" r="7" stroke="currentColor" stroke-width="1.5" fill="none"/><circle cx="8.5" cy="8.5" r="3" fill="currentColor"/></svg>Acceso</div>
+    <div class="nav-item"><svg viewBox="0 0 17 17" fill="currentColor"><rect x="2" y="3" width="13" height="2" rx="1"/><rect x="2" y="7.5" width="10" height="2" rx="1"/><rect x="2" y="12" width="7" height="2" rx="1"/></svg>Nueva solicitud</div>
+    <div class="nav-item"><svg viewBox="0 0 17 17" fill="currentColor"><rect x="1" y="4" width="15" height="10" rx="2" stroke="currentColor" stroke-width="1.5" fill="none"/><path d="M6 8.5l2 2 3-3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" fill="none"/></svg>Estado</div>
+    <div class="nav-item active"><svg viewBox="0 0 17 17" fill="currentColor"><path d="M8.5 2v9M5 8l3.5 3.5L12 8" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" fill="none"/><path d="M2 13h13" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>Descargas</div>
+    <div class="nav-item"><svg viewBox="0 0 17 17" fill="currentColor"><path d="M8.5 3v5l3 2" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" fill="none"/><circle cx="8.5" cy="8.5" r="6.5" stroke="currentColor" stroke-width="1.5" fill="none"/></svg>Historial</div>
+    <div class="sidebar-footer"><div class="user-pill"><div class="avatar">AU</div><div><div class="user-name">Admin Usuario</div><div class="user-role">Administrador</div></div></div></div>
+  </aside>
+  <div class="content">
+    <div class="topbar">
+      <div class="topbar-left">
+        <div class="back-btn"><svg viewBox="0 0 14 14" fill="none"><path d="M9 2L4 7l5 5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>Volver</div>
+        <div><div class="topbar-title">Descargar — Lote #2041</div><div class="topbar-sub">3 de 5 imágenes disponibles</div></div>
+      </div>
+    </div>
+    <div class="body">
+      <div class="panel-left">
+        <div class="batch-info">
+          <div class="batch-item"><div class="batch-label">LOTE</div><div class="batch-val">#2041</div></div>
+          <div class="batch-sep"></div>
+          <div class="batch-item"><div class="batch-label">FECHA</div><div class="batch-val" style="font-size:13px;font-weight:400;color:var(--text2)">26 mar 2026</div></div>
+          <div class="batch-sep"></div>
+          <div class="batch-item"><div class="batch-label">COMPLETADAS</div><div class="batch-val" style="color:var(--green)">3 / 5</div></div>
+          <div class="batch-sep"></div>
+          <div class="batch-item"><div class="batch-label">TAMAÑO</div><div class="batch-val" style="font-size:13px;font-weight:400;color:var(--text2)">559 KB</div></div>
+        </div>
+        <div class="section-label">ARCHIVOS RESULTANTES</div>
+        <div class="file-list">
+          <div class="file-row ready"><div class="file-ext">JPG</div><div class="file-info"><div class="file-name">foto_vacaciones_result.jpg</div><div class="file-meta">Escala de grises, Redimensionar<span class="file-size">342 KB</span></div></div><span class="chip chip-green">Lista</span><button class="btn-dl"><svg viewBox="0 0 12 12" fill="none"><path d="M6 1v7M3 5.5l3 3 3-3M1 10h10" stroke="#818cf8" stroke-width="1.4" stroke-linecap="round"/></svg>Descargar</button></div>
+          <div class="file-row ready"><div class="file-ext">PNG</div><div class="file-info"><div class="file-name">logo_empresa_result.png</div><div class="file-meta">Rotar, Marca de agua<span class="file-size">128 KB</span></div></div><span class="chip chip-green">Lista</span><button class="btn-dl"><svg viewBox="0 0 12 12" fill="none"><path d="M6 1v7M3 5.5l3 3 3-3M1 10h10" stroke="#818cf8" stroke-width="1.4" stroke-linecap="round"/></svg>Descargar</button></div>
+          <div class="file-row ready"><div class="file-ext">JPG</div><div class="file-info"><div class="file-name">captura_result.jpg</div><div class="file-meta">Brillo/Contraste, JPG<span class="file-size">89 KB</span></div></div><span class="chip chip-green">Lista</span><button class="btn-dl"><svg viewBox="0 0 12 12" fill="none"><path d="M6 1v7M3 5.5l3 3 3-3M1 10h10" stroke="#818cf8" stroke-width="1.4" stroke-linecap="round"/></svg>Descargar</button></div>
+          <div class="file-row pending"><div class="file-ext dim">TIF</div><div class="file-info"><div class="file-name dim">banner.tif</div><div class="file-meta">Procesando...</div></div><span class="chip chip-gray">Procesando</span><button class="btn-dl disabled" disabled>No disponible</button></div>
+          <div class="file-row pending"><div class="file-ext dim">JPG</div><div class="file-info"><div class="file-name dim">retrato.jpg</div><div class="file-meta">En cola...</div></div><span class="chip chip-gray">En cola</span><button class="btn-dl disabled" disabled>No disponible</button></div>
+        </div>
+      </div>
+      <div class="panel-right">
+        <div class="panel-right-title">Resumen</div>
+        <div class="stat-cards">
+          <div class="stat-card"><span class="stat-label">Archivos listos</span><span class="stat-val green">3</span></div>
+          <div class="stat-card"><span class="stat-label">Tamaño total</span><span class="stat-val accent">559 KB</span></div>
+          <div class="stat-card"><span class="stat-label">Pendientes</span><span class="stat-val" style="color:var(--amber)">2</span></div>
+        </div>
+        <div class="zip-card">
+          <div class="zip-label">PAQUETE COMPLETO</div>
+          <div class="zip-size">559 KB .zip</div>
+          <button class="btn-zip"><svg viewBox="0 0 14 14" fill="none"><path d="M7 1v9M3 6l4 4 4-4M1 12h12" stroke="#fff" stroke-width="1.6" stroke-linecap="round"/></svg>Descargar todo (ZIP)</button>
+        </div>
+        <p class="zip-note">Las imágenes pendientes estarán disponibles cuando los nodos completen el trabajo.</p>
+      </div>
+    </div>
+  </div>
+</div>
+</body>
+</html>

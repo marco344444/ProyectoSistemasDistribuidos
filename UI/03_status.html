@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ImageProc — Estado del lote</title>
+  <link rel="stylesheet" href="styles.css">
+  <style>
+    .body { flex: 1; display: grid; grid-template-columns: 1fr 300px; overflow: hidden; min-height: 0; }
+    .panel-left { padding: 28px 36px; overflow-y: auto; }
+    .image-rows { display: flex; flex-direction: column; gap: 8px; }
+    .image-row { background: var(--bg2); border: 0.5px solid var(--border); border-radius: 12px; padding: 14px 18px; display: flex; align-items: center; gap: 12px; }
+    .image-row.completed { border-color: var(--green-border); }
+    .image-row.processing { border-color: var(--amber-border); }
+    .row-info { flex: 1; min-width: 0; }
+    .row-name { font-size: 14px; font-weight: 600; color: var(--text); margin-bottom: 3px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .row-meta { font-size: 12px; color: var(--text2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .row-meta span { color: var(--accent); }
+    .row-time { font-size: 12px; color: var(--text2); white-space: nowrap; flex-shrink: 0; }
+    .log-title { font-size: 13px; font-weight: 700; color: var(--text); margin-bottom: 16px; }
+    .log-entries { display: flex; flex-direction: column; gap: 7px; }
+    .log-entry { background: var(--bg3); border-radius: 9px; padding: 10px 12px; border-left: 2px solid var(--border2); }
+    .log-entry.info { border-left-color: var(--accent); }
+    .log-entry.success { border-left-color: var(--green); }
+    .log-entry.warn { border-left-color: var(--amber); }
+    .log-time { font-size: 10px; color: var(--text3); font-family: monospace; margin-bottom: 3px; }
+    .log-msg { font-size: 12px; color: var(--text2); line-height: 1.4; }
+    .log-msg.success { color: var(--green); }
+    .log-msg.warn { color: var(--amber); }
+    .log-msg.accent { color: var(--accent); }
+  </style>
+</head>
+<body>
+<div class="layout">
+  <aside class="sidebar">
+    <div class="logo">
+      <div class="logo-icon"><svg viewBox="0 0 22 22" fill="none"><rect x="2" y="2" width="8" height="8" rx="2" fill="#818cf8"/><rect x="12" y="2" width="8" height="8" rx="2" fill="#818cf8" opacity=".4"/><rect x="2" y="12" width="8" height="8" rx="2" fill="#818cf8" opacity=".4"/><rect x="12" y="12" width="8" height="8" rx="2" fill="#818cf8"/></svg></div>
+      <div><div class="logo-text">ImageProc</div><div class="logo-sub">Sistema Distribuido</div></div>
+    </div>
+    <div class="nav-section-label">NAVEGACIÓN</div>
+    <div class="nav-item"><svg viewBox="0 0 17 17" fill="currentColor"><circle cx="8.5" cy="8.5" r="7" stroke="currentColor" stroke-width="1.5" fill="none"/><circle cx="8.5" cy="8.5" r="3" fill="currentColor"/></svg>Acceso</div>
+    <div class="nav-item"><svg viewBox="0 0 17 17" fill="currentColor"><rect x="2" y="3" width="13" height="2" rx="1"/><rect x="2" y="7.5" width="10" height="2" rx="1"/><rect x="2" y="12" width="7" height="2" rx="1"/></svg>Nueva solicitud</div>
+    <div class="nav-item active"><svg viewBox="0 0 17 17" fill="currentColor"><rect x="1" y="4" width="15" height="10" rx="2" stroke="currentColor" stroke-width="1.5" fill="none"/><path d="M6 8.5l2 2 3-3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" fill="none"/></svg>Estado</div>
+    <div class="nav-item"><svg viewBox="0 0 17 17" fill="currentColor"><path d="M8.5 2v9M5 8l3.5 3.5L12 8" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" fill="none"/><path d="M2 13h13" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>Descargas</div>
+    <div class="nav-item"><svg viewBox="0 0 17 17" fill="currentColor"><path d="M8.5 3v5l3 2" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" fill="none"/><circle cx="8.5" cy="8.5" r="6.5" stroke="currentColor" stroke-width="1.5" fill="none"/></svg>Historial</div>
+    <div class="sidebar-footer"><div class="user-pill"><div class="avatar">AU</div><div><div class="user-name">Admin Usuario</div><div class="user-role">Administrador</div></div></div></div>
+  </aside>
+  <div class="content">
+    <div class="topbar">
+      <div class="topbar-left">
+        <div class="back-btn"><svg viewBox="0 0 14 14" fill="none"><path d="M9 2L4 7l5 5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>Volver</div>
+        <div><div class="topbar-title">Lote #2041</div><div class="topbar-sub">26 mar 2026 — 10:32 a.m.</div></div>
+      </div>
+      <span class="status-badge badge-amber">En progreso</span>
+    </div>
+    <div class="body">
+      <div class="panel-left">
+        <div class="metrics">
+          <div class="metric"><div class="metric-label">TOTAL</div><div class="metric-val">5</div></div>
+          <div class="metric"><div class="metric-label">COMPLETADAS</div><div class="metric-val green">3</div></div>
+          <div class="metric"><div class="metric-label">PROCESANDO</div><div class="metric-val amber">1</div></div>
+          <div class="metric"><div class="metric-label">EN COLA</div><div class="metric-val accent">1</div></div>
+        </div>
+        <div class="progress-section">
+          <div class="progress-header"><span class="progress-label">PROGRESO GENERAL</span><span class="progress-pct">60%</span></div>
+          <div class="progress-track"><div class="progress-bar" style="width:60%"></div></div>
+        </div>
+        <div class="section-label">IMÁGENES DEL LOTE</div>
+        <div class="image-rows">
+          <div class="image-row completed"><div class="status-dot dot-green"></div><div class="row-info"><div class="row-name">foto_vacaciones.jpg</div><div class="row-meta">Nodo-01 · <span>Escala de grises</span>, Redimensionar</div></div><span class="row-time">3.2 seg</span><span class="chip chip-green">Completada</span></div>
+          <div class="image-row completed"><div class="status-dot dot-green"></div><div class="row-info"><div class="row-name">logo_empresa.png</div><div class="row-meta">Nodo-02 · <span>Rotar</span>, Marca de agua</div></div><span class="row-time">1.8 seg</span><span class="chip chip-green">Completada</span></div>
+          <div class="image-row completed"><div class="status-dot dot-green"></div><div class="row-info"><div class="row-name">captura.png</div><div class="row-meta">Nodo-01 · <span>Brillo/Contraste</span>, JPG</div></div><span class="row-time">2.5 seg</span><span class="chip chip-green">Completada</span></div>
+          <div class="image-row processing"><div class="status-dot dot-amber"></div><div class="row-info"><div class="row-name">banner.tif</div><div class="row-meta">Nodo-03 · <span>Recortar</span>, Reflejar, Desenfoque</div></div><span class="row-time" style="color:var(--amber)">12 seg...</span><span class="chip chip-amber">Procesando</span></div>
+          <div class="image-row"><div class="status-dot dot-gray"></div><div class="row-info"><div class="row-name" style="color:var(--text2)">retrato.jpg</div><div class="row-meta">Sin asignar · Perfilado, PNG</div></div><span class="row-time">—</span><span class="chip chip-gray">En cola</span></div>
+        </div>
+      </div>
+      <div class="panel-right">
+        <div class="log-title">Log del sistema</div>
+        <div class="log-entries">
+          <div class="log-entry info"><div class="log-time">10:32:01.243</div><div class="log-msg accent">Lote #2041 recibido. 5 imágenes encoladas.</div></div>
+          <div class="log-entry success"><div class="log-time">10:32:04.112</div><div class="log-msg success">Nodo-01: foto_vacaciones.jpg completada en 3.2s</div></div>
+          <div class="log-entry success"><div class="log-time">10:32:05.880</div><div class="log-msg success">Nodo-02: logo_empresa.png completada en 1.8s</div></div>
+          <div class="log-entry info"><div class="log-time">10:32:06.001</div><div class="log-msg accent">Nodo-03: iniciando banner.tif</div></div>
+          <div class="log-entry success"><div class="log-time">10:32:07.334</div><div class="log-msg success">Nodo-01: captura.png completada en 2.5s</div></div>
+          <div class="log-entry warn"><div class="log-time">10:32:18.007</div><div class="log-msg warn">Nodo-03: latencia elevada en Desenfoque</div></div>
+          <div class="log-entry info"><div class="log-time">10:32:18.200</div><div class="log-msg accent">retrato.jpg en cola — esperando nodo libre</div></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+</body>
+</html>
