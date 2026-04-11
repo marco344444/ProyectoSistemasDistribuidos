@@ -100,5 +100,92 @@
     </div>
   </div>
 </div>
+<script>
+(() => {
+  const idLote = localStorage.getItem('idLoteActual');
+  const title = document.querySelector('.topbar-title');
+  const subtitle = document.querySelector('.topbar-sub');
+  const batchVal = document.querySelector('.batch-info .batch-val');
+  const fileList = document.querySelector('.file-list');
+  const readyCountEl = document.querySelector('.stat-val.green');
+  const totalSizeEl = document.querySelector('.stat-val.accent');
+  const pendingEl = document.querySelector('.stat-val[style*="amber"]');
+  const zipSizeEl = document.querySelector('.zip-size');
+
+  if (!idLote) {
+    if (subtitle) {
+      subtitle.textContent = 'No hay lote seleccionado. Ve a Nueva solicitud.';
+    }
+    return;
+  }
+
+  if (title) {
+    title.textContent = 'Descargar - ' + idLote;
+  }
+  if (batchVal) {
+    batchVal.textContent = idLote;
+  }
+
+  const render = (data) => {
+    const archivos = data.archivos || [];
+    let totalKb = 0;
+    let ready = 0;
+    let pending = 0;
+
+    fileList.innerHTML = '';
+    archivos.forEach((f) => {
+      totalKb += Number(f.tamKb || 0);
+      if (f.listo) {
+        ready++;
+      } else {
+        pending++;
+      }
+
+      const row = document.createElement('div');
+      row.className = 'file-row ' + (f.listo ? 'ready' : 'pending');
+      const ext = (f.nombre.split('.').pop() || '').toUpperCase();
+      row.innerHTML =
+        '<div class="file-ext' + (f.listo ? '' : ' dim') + '">' + ext + '</div>' +
+        '<div class="file-info"><div class="file-name' + (f.listo ? '' : ' dim') + '">' + f.nombre + '</div>' +
+        '<div class="file-meta">Resultado simulado<span class="file-size">' + f.tamKb + ' KB</span></div></div>' +
+        '<span class="chip ' + (f.listo ? 'chip-green">Lista' : 'chip-gray">Pendiente') + '</span>' +
+        '<button class="btn-dl ' + (f.listo ? '' : 'disabled') + '" ' + (f.listo ? '' : 'disabled') + '>' +
+        (f.listo ? 'Descargar' : 'No disponible') + '</button>';
+      fileList.appendChild(row);
+    });
+
+    if (subtitle) {
+      subtitle.textContent = ready + ' de ' + archivos.length + ' imagenes disponibles';
+    }
+    if (readyCountEl) {
+      readyCountEl.textContent = String(ready);
+    }
+    if (pendingEl) {
+      pendingEl.textContent = String(pending);
+    }
+    if (totalSizeEl) {
+      totalSizeEl.textContent = totalKb + ' KB';
+    }
+    if (zipSizeEl) {
+      zipSizeEl.textContent = totalKb + ' KB .zip';
+    }
+  };
+
+  fetch('http://localhost:8080/api/descargas?idLote=' + encodeURIComponent(idLote))
+    .then((r) => {
+      if (!r.ok) {
+        throw new Error('No disponible');
+      }
+      return r.json();
+    })
+    .then(render)
+    .catch(() => {
+      if (subtitle) {
+        subtitle.textContent = 'No se pudieron cargar descargas. Verifica backend visual.';
+      }
+    });
+})();
+</script>
+<script src="navigation.js"></script>
 </body>
 </html>

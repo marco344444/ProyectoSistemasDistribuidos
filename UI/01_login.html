@@ -359,5 +359,40 @@
   </main>
 
 </div>
+    <script>
+    (() => {
+      const loginBtn = document.querySelector('.btn-auth');
+      const fields = document.querySelectorAll('.field');
+      const emailInput = fields[0];
+      const passInput = fields[1];
+
+      const doLogin = async () => {
+        const usuario = (emailInput.value || 'usuario-demo').trim();
+        const password = (passInput.value || '1234').trim();
+
+        loginBtn.disabled = true;
+        loginBtn.textContent = 'Ingresando...';
+
+        try {
+          const qs = new URLSearchParams({ usuario, password }).toString();
+          const response = await fetch('http://localhost:8080/api/login?' + qs);
+          if (!response.ok) {
+            throw new Error('No se pudo iniciar sesion');
+          }
+          const data = await response.json();
+          localStorage.setItem('tokenSesion', data.token);
+          localStorage.setItem('usuarioSesion', data.usuario || usuario);
+          window.location.href = '02_upload.html';
+        } catch (error) {
+          alert('Error de conexion con el backend visual. Inicia VisualDemoServerMain.');
+          loginBtn.disabled = false;
+          loginBtn.textContent = 'Iniciar sesion';
+        }
+      };
+
+      loginBtn.addEventListener('click', doLogin);
+    })();
+    </script>
+    <script src="navigation.js"></script>
 </body>
 </html>

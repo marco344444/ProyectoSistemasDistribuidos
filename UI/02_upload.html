@@ -66,11 +66,12 @@
     </div>
     <div class="body">
       <div class="panel-left">
-        <div class="dropzone">
+        <div class="dropzone" id="dropzone">
           <div class="dz-icon"><svg viewBox="0 0 22 22" fill="none"><path d="M11 2v12M5 8l6-6 6 6M3 18v2h16v-2H3z" stroke="#818cf8" stroke-width="1.8" stroke-linecap="round"/></svg></div>
           <div class="dz-title">Arrastra tus imágenes aquí</div>
           <div class="dz-sub">JPG, PNG, TIF — Máximo 10 imágenes por lote</div>
           <button class="btn-upload">Seleccionar archivos</button>
+          <input id="fileInput" type="file" accept=".jpg,.jpeg,.png,.tif,.tiff" multiple style="display:none">
         </div>
         <div class="section-label">IMÁGENES CARGADAS (3)</div>
         <div class="image-list" id="list"></div>
@@ -95,6 +96,49 @@
 <script>
 const T=['Escala de grises','Redimensionar','Recortar','Rotar','Reflejar','Desenfoque','Perfilado','Brillo/Contraste','Marca de agua','JPG','PNG','TIF'];
 const F=[{name:'foto_producto.jpg',ext:'JPG',sel:[0,1,8]},{name:'logo_empresa.png',ext:'PNG',sel:[4,3]},{name:'banner.tif',ext:'TIF',sel:[7,2,6]}];
+
+function extFromName(name){
+  const parts = name.toLowerCase().split('.');
+  if (parts.length < 2) return 'IMG';
+  const ext = parts.pop();
+  if (ext === 'jpeg') return 'JPG';
+  return ext.toUpperCase();
+}
+
+function loadSelectedFiles(fileList){
+  if (!fileList || fileList.length === 0) return;
+  F.length = 0;
+  Array.from(fileList).slice(0, 400).forEach((file) => {
+    F.push({ name: file.name, ext: extFromName(file.name), sel: [0,3] });
+  });
+  const section = document.querySelector('.section-label');
+  if (section) {
+    section.textContent = 'IMAGENES CARGADAS (' + F.length + ')';
+  }
+  render();
+}
+
+const fileInput = document.getElementById('fileInput');
+const uploadBtn = document.querySelector('.btn-upload');
+const dropzone = document.getElementById('dropzone');
+
+if (uploadBtn && fileInput) {
+  uploadBtn.addEventListener('click', (ev) => {
+    ev.preventDefault();
+    fileInput.click();
+  });
+  fileInput.addEventListener('change', () => loadSelectedFiles(fileInput.files));
+}
+
+if (dropzone) {
+  dropzone.addEventListener('dragover', (ev) => {
+    ev.preventDefault();
+  });
+  dropzone.addEventListener('drop', (ev) => {
+    ev.preventDefault();
+    loadSelectedFiles(ev.dataTransfer.files);
+  });
+}
 function render(){
   const list=document.getElementById('list');
   list.innerHTML='';
@@ -109,6 +153,47 @@ function render(){
   });
 }
 render();
+
+(() => {
+  const sendBtn = document.querySelector('.btn-primary');
+  if (!sendBtn) {
+    return;
+  }
+
+  sendBtn.addEventListener('click', async () => {
+    const token = localStorage.getItem('tokenSesion');
+    const usuario = localStorage.getItem('usuarioSesion') || 'usuario-demo';
+    const inputCantidad = prompt('Cantidad de imagenes a enviar (1-400):', String(F.length));
+    const parsedCantidad = Number(inputCantidad);
+    const cantidad = Number.isFinite(parsedCantidad) ? Math.max(1, Math.min(400, Math.floor(parsedCantidad))) : F.length;
+
+    if (!token) {
+      alert('No hay sesion activa. Vuelve a la pantalla de login.');
+      window.location.href = '01_login.html';
+      return;
+    }
+
+    sendBtn.disabled = true;
+    sendBtn.textContent = 'Enviando lote...';
+
+    try {
+      const qs = new URLSearchParams({ token: token, usuario: usuario, cantidad: String(cantidad) }).toString();
+      const response = await fetch('http://localhost:8080/api/enviarLote?' + qs);
+      if (!response.ok) {
+        throw new Error('No se pudo enviar el lote');
+      }
+
+      const data = await response.json();
+      localStorage.setItem('idLoteActual', data.idLote);
+      window.location.href = '03_status.html';
+    } catch (error) {
+      alert('Error enviando lote. Verifica que el backend visual este activo en puerto 8080.');
+      sendBtn.disabled = false;
+      sendBtn.innerHTML = '<svg viewBox="0 0 14 14" fill="none"><path d="M7 1v9M3 6l4 4 4-4M1 12h12" stroke="#fff" stroke-width="1.5" stroke-linecap="round"/></svg>Enviar lote';
+    }
+  });
+})();
 </script>
+<script src="navigation.js"></script>
 </body>
 </html>

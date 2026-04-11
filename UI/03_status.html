@@ -90,4 +90,65 @@
   </div>
 </div>
 </body>
+<script>
+(() => {
+  const token = localStorage.getItem('tokenSesion');
+  const idLote = localStorage.getItem('idLoteActual');
+  const badge = document.querySelector('.status-badge');
+  const title = document.querySelector('.topbar-title');
+  const sub = document.querySelector('.topbar-sub');
+
+  if (title && idLote) {
+    title.textContent = 'Lote ' + idLote;
+  }
+  if (sub) {
+    sub.textContent = 'Estado consultado en tiempo real';
+  }
+
+  if (!token || !idLote) {
+    if (badge) {
+      badge.textContent = 'Sin sesion';
+      badge.className = 'status-badge badge-amber';
+    }
+    return;
+  }
+
+  const refresh = async () => {
+    try {
+      const qs = new URLSearchParams({ token: token, idLote: idLote }).toString();
+      const response = await fetch('http://localhost:8080/api/estado?' + qs);
+      if (!response.ok) {
+        throw new Error('Estado no disponible');
+      }
+      const data = await response.json();
+
+      if (!badge) {
+        return;
+      }
+
+      if (data.estado === 'COMPLETADO') {
+        badge.textContent = 'Completado';
+        badge.className = 'status-badge chip-green';
+      } else if (data.estado === 'EN_PROCESO') {
+        badge.textContent = 'En progreso';
+        badge.className = 'status-badge badge-amber';
+      } else if (data.estado === 'ERROR') {
+        badge.textContent = 'Error';
+        badge.className = 'status-badge chip-red';
+      } else {
+        badge.textContent = data.estado || 'Recibido';
+        badge.className = 'status-badge badge-amber';
+      }
+    } catch (error) {
+      if (badge) {
+        badge.textContent = 'Backend no disponible';
+      }
+    }
+  };
+
+  refresh();
+  setInterval(refresh, 2000);
+})();
+</script>
+<script src="navigation.js"></script>
 </html>

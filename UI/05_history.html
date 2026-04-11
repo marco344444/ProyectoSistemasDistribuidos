@@ -75,26 +75,63 @@
   </div>
 </div>
 <script>
-const rows=[
-  {id:2041,date:'26 mar 2026',imgs:5,done:3,status:'En progreso',dur:'—',nodes:'Nodo-01, 02, 03'},
-  {id:2038,date:'24 mar 2026',imgs:3,done:3,status:'Completado',dur:'8.3 seg',nodes:'Nodo-01, 02'},
-  {id:2031,date:'21 mar 2026',imgs:8,done:8,status:'Completado',dur:'21.7 seg',nodes:'Nodo-01, 02, 04'},
-  {id:2024,date:'18 mar 2026',imgs:2,done:0,status:'Fallido',dur:'3.1 seg',nodes:'Nodo-03'},
-  {id:2019,date:'15 mar 2026',imgs:6,done:6,status:'Completado',dur:'14.2 seg',nodes:'Nodo-01, 02'},
-  {id:2012,date:'12 mar 2026',imgs:4,done:4,status:'Completado',dur:'9.8 seg',nodes:'Nodo-02, 04'},
-  {id:2005,date:'10 mar 2026',imgs:10,done:10,status:'Completado',dur:'28.5 seg',nodes:'Nodo-01, 02, 03, 04'},
-  {id:1998,date:'07 mar 2026',imgs:1,done:1,status:'Completado',dur:'2.1 seg',nodes:'Nodo-01'},
-];
-const chipClass={Completado:'chip-green','En progreso':'chip-amber',Fallido:'chip-red'};
-const tbody=document.getElementById('tbody');
-rows.forEach(r=>{
-  const pct=r.imgs>0?Math.round(r.done/r.imgs*100):0;
-  const isAmber=r.status==='En progreso';
-  const done=r.status==='Completado';
-  const tr=document.createElement('tr');
-  tr.innerHTML=`<td class="lote-id">#${r.id}</td><td class="mono">${r.date}</td><td>${r.imgs} imgs</td><td><div style="display:flex;align-items:center;gap:7px"><div class="progress-mini"><div class="progress-mini-bar${isAmber?' amber':''}" style="width:${pct}%"></div></div><span style="font-size:11px;color:var(--text2)">${pct}%</span></div></td><td><span class="chip ${chipClass[r.status]}">${r.status}</span></td><td class="muted">${r.dur}</td><td style="font-size:11px;color:var(--text2)">${r.nodes}</td><td><div class="action-btns"><button class="btn-sm">Ver detalle</button><button class="btn-sm${done?'':' dim'}" ${done?'':'disabled'}>ZIP${done?' ↓':''}</button></div></td>`;
-  tbody.appendChild(tr);
-});
+const chipClass = { COMPLETADO: 'chip-green', EN_PROCESO: 'chip-amber', ERROR: 'chip-red' };
+const tbody = document.getElementById('tbody');
+const usuario = localStorage.getItem('usuarioSesion') || 'usuario-demo';
+
+const statCards = document.querySelectorAll('.stats-row .stat .stat-val');
+
+const fmtDate = (ts) => {
+  const d = new Date(Number(ts));
+  if (Number.isNaN(d.getTime())) {
+    return '-';
+  }
+  return d.toLocaleString('es-CO');
+};
+
+fetch('http://localhost:8080/api/historial?usuario=' + encodeURIComponent(usuario))
+  .then((r) => {
+    if (!r.ok) {
+      throw new Error('No disponible');
+    }
+    return r.json();
+  })
+  .then((data) => {
+    if (statCards.length >= 4) {
+      statCards[0].textContent = String(data.totalLotes || 0);
+      statCards[1].textContent = String(data.completados || 0);
+      statCards[2].textContent = String(data.enProgreso || 0);
+      statCards[3].textContent = String(data.totalImagenes || 0);
+    }
+
+    tbody.innerHTML = '';
+    (data.lotes || []).forEach((r) => {
+      const done = r.estado === 'COMPLETADO';
+      const pct = done ? 100 : 50;
+      const tr = document.createElement('tr');
+      tr.innerHTML =
+        '<td class="lote-id">' + r.idLote + '</td>' +
+        '<td class="mono">' + fmtDate(r.fecha) + '</td>' +
+        '<td>' + r.imagenes + ' imgs</td>' +
+        '<td><div style="display:flex;align-items:center;gap:7px"><div class="progress-mini"><div class="progress-mini-bar' +
+        (done ? '' : ' amber') + '" style="width:' + pct + '%"></div></div><span style="font-size:11px;color:var(--text2)">' + pct + '%</span></div></td>' +
+        '<td><span class="chip ' + (chipClass[r.estado] || 'chip-amber') + '">' + r.estado + '</span></td>' +
+        '<td class="muted">' + (r.duracionMs || 0) + ' ms</td>' +
+        '<td style="font-size:11px;color:var(--text2)">' + (r.nodos || '-') + '</td>' +
+        '<td><div class="action-btns"><button class="btn-sm btn-detalle">Ver detalle</button><button class="btn-sm ' +
+        (done ? '' : 'dim') + '" ' + (done ? '' : 'disabled') + '>ZIP' + (done ? ' ↓' : '') + '</button></div></td>';
+
+      tr.querySelector('.btn-detalle').addEventListener('click', () => {
+        localStorage.setItem('idLoteActual', r.idLote);
+        window.location.href = '04_download.html';
+      });
+      tbody.appendChild(tr);
+    });
+  })
+  .catch(() => {
+    tbody.innerHTML = '<tr><td colspan="8">No se pudo cargar historial. Verifica backend visual.</td></tr>';
+  });
 </script>
+<script src="navigation.js"></script>
 </body>
 </html>
