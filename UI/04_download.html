@@ -14,7 +14,7 @@
     .batch-val { font-size: 15px; font-weight: 700; color: var(--text); }
     .batch-sep { width: 0.5px; height: 32px; background: var(--border); }
     .file-list { display: flex; flex-direction: column; gap: 8px; }
-    .file-row { background: var(--bg2); border: 0.5px solid var(--border); border-radius: 12px; padding: 14px 18px; display: flex; align-items: center; gap: 14px; }
+    .file-row { background: var(--bg2); border: 0.5px solid var(--border); border-radius: 12px; padding: 14px 18px; display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
     .file-row.ready { border-color: var(--green-border); }
     .file-row.pending { opacity: 0.45; }
     .file-ext { width: 46px; height: 46px; background: var(--bg3); border: 0.5px solid var(--border2); border-radius: 10px; display: flex; align-items: center; justify-content: center; font-size: 10px; font-weight: 800; color: var(--accent); letter-spacing: 0.5px; flex-shrink: 0; }
@@ -39,6 +39,18 @@
     .btn-zip { width: 100%; background: var(--accent); border: none; border-radius: 9px; padding: 12px; font-size: 14px; font-weight: 700; color: #fff; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 7px; }
     .btn-zip svg { width: 14px; height: 14px; }
     .zip-note { font-size: 12px; color: var(--text3); line-height: 1.6; }
+
+    @media (max-width: 767px) {
+      .body { grid-template-columns: 1fr; overflow: visible; }
+      .panel-left { padding: 18px 14px; }
+      .panel-right { border-left: none; border-top: 0.5px solid var(--border); padding: 18px 14px; overflow: visible; }
+      .batch-sep { display: none; }
+      .file-size { display: none; }
+    }
+
+    @media (max-width: 1023px) and (min-width: 768px) {
+      .body { grid-template-columns: 1fr 240px; }
+    }
   </style>
 </head>
 <body>

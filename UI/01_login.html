@@ -14,7 +14,7 @@
       background: var(--bg);
       position: relative;
       padding: 40px 32px;
-      min-height: calc(100vh - 0px);
+      min-height: 100vh;
     }
 
     .grid-bg {
@@ -65,7 +65,7 @@
     }
 
     .auth-headline {
-      font-size: clamp(32px, 3.5vw, 48px);
+      font-size: clamp(28px, 3.5vw, 48px);
       font-weight: 800;
       color: var(--text);
       letter-spacing: -1.2px;
@@ -149,6 +149,7 @@
       cursor: pointer;
       color: var(--text2);
       transition: all 0.15s;
+      user-select: none;
     }
 
     .tab.active { background: var(--accent); color: #fff; font-weight: 600; }
@@ -171,10 +172,20 @@
       margin-bottom: 14px;
       outline: none;
       transition: border-color 0.15s;
+      box-sizing: border-box;
     }
 
     .field::placeholder { color: var(--text3); }
     .field:focus { border-color: var(--accent); }
+    .field.invalid { border-color: var(--red); margin-bottom: 4px; }
+
+    .field-error {
+      font-size: 11px;
+      color: var(--red);
+      margin-bottom: 10px;
+      display: none;
+    }
+    .field-error.visible { display: block; }
 
     .btn-auth {
       width: 100%;
@@ -191,6 +202,7 @@
     }
 
     .btn-auth:hover { background: var(--accent-dim); }
+    .btn-auth:disabled { opacity: 0.6; cursor: not-allowed; }
 
     .divider-row {
       display: flex;
@@ -207,7 +219,10 @@
       font-size: 13px;
       color: var(--accent);
       cursor: pointer;
+      user-select: none;
     }
+
+    .hint-link:hover { text-decoration: underline; }
 
     .demo-box {
       background: var(--bg3);
@@ -233,12 +248,40 @@
     }
 
     .demo-row:last-child { margin-bottom: 0; }
+
+    .alert-box {
+      border-radius: 9px;
+      padding: 11px 14px;
+      font-size: 13px;
+      font-weight: 500;
+      margin-bottom: 14px;
+      display: none;
+    }
+
+    .alert-box.visible { display: block; }
+    .alert-error   { background: var(--red-bg);   border: 0.5px solid var(--red-border);   color: var(--red); }
+    .alert-success { background: var(--green-bg); border: 0.5px solid var(--green-border); color: var(--green); }
+
+    /* Form panels */
+    #form-login    { display: block; }
+    #form-register { display: none; }
+
+    .two-cols {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 0 12px;
+    }
+
+    @media (max-width: 767px) {
+      .main { padding: 24px 16px; align-items: flex-start; padding-top: 40px; }
+      .two-cols { grid-template-columns: 1fr; gap: 0; }
+    }
   </style>
 </head>
 <body>
 <div class="layout">
 
-  <aside class="sidebar">
+  <aside class="sidebar sidebar-auth">
     <div class="logo">
       <div class="logo-icon">
         <svg viewBox="0 0 22 22" fill="none">
@@ -324,75 +367,313 @@
       </div>
 
       <div class="auth-card">
-        <div class="card-title">Bienvenido</div>
-        <div class="card-sub">Accede al sistema de procesamiento distribuido de imágenes</div>
+        <div class="card-title" id="card-title">Bienvenido</div>
+        <div class="card-sub" id="card-sub">Accede al sistema de procesamiento distribuido de imágenes</div>
 
         <div class="tabs">
-          <div class="tab active">Iniciar sesión</div>
-          <div class="tab">Registrarse</div>
+          <div class="tab active" id="tab-login">Iniciar sesión</div>
+          <div class="tab" id="tab-register">Registrarse</div>
         </div>
 
-        <div class="field-label">Correo electrónico</div>
-        <input class="field" type="email" placeholder="usuario@empresa.com">
+        <!-- Alert box -->
+        <div class="alert-box alert-error" id="alert-box"></div>
 
-        <div class="field-label">Contraseña</div>
-        <input class="field" type="password" placeholder="••••••••">
+        <!-- LOGIN FORM -->
+        <div id="form-login">
+          <div class="field-label">Correo electrónico</div>
+          <input class="field" id="login-email" type="email" placeholder="usuario@empresa.com" autocomplete="email">
 
-        <button class="btn-auth">Iniciar sesión</button>
+          <div class="field-label">Contraseña</div>
+          <input class="field" id="login-pass" type="password" placeholder="••••••••" autocomplete="current-password">
 
-        <div class="divider-row">
-          <div class="divider-line"></div>
-          <span class="divider-text">¿No tienes cuenta?</span>
-          <div class="divider-line"></div>
+          <button class="btn-auth" id="login-btn">Iniciar sesión</button>
+
+          <div class="divider-row">
+            <div class="divider-line"></div>
+            <span class="divider-text">¿No tienes cuenta?</span>
+            <div class="divider-line"></div>
+          </div>
+
+          <div class="hint-link" id="hint-to-register">Crear cuenta nueva →</div>
+
+          <div class="demo-box">
+            <div class="demo-label">CREDENCIALES DE PRUEBA</div>
+            <div class="demo-row">admin@imageproc.com  ·  admin123</div>
+            <div class="demo-row">user@imageproc.com   ·  user123</div>
+          </div>
         </div>
 
-        <div class="hint-link">Crear cuenta nueva →</div>
+        <!-- REGISTER FORM -->
+        <div id="form-register">
+          <div class="two-cols">
+            <div>
+              <div class="field-label">Nombres</div>
+              <input class="field" id="reg-nombres" type="text" placeholder="Juan Carlos" autocomplete="given-name">
+              <div class="field-error" id="err-nombres">Ingresa tus nombres</div>
+            </div>
+            <div>
+              <div class="field-label">Apellidos</div>
+              <input class="field" id="reg-apellidos" type="text" placeholder="Pérez García" autocomplete="family-name">
+              <div class="field-error" id="err-apellidos">Ingresa tus apellidos</div>
+            </div>
+          </div>
 
-        <div class="demo-box">
-          <div class="demo-label">CREDENCIALES DE PRUEBA</div>
-          <div class="demo-row">admin@imageproc.com  ·  admin123</div>
-          <div class="demo-row">user@imageproc.com   ·  user123</div>
+          <div class="field-label">Cédula</div>
+          <input class="field" id="reg-cedula" type="text" placeholder="1234567890" autocomplete="off" inputmode="numeric">
+          <div class="field-error" id="err-cedula">Ingresa una cédula válida (solo números)</div>
+
+          <div class="field-label">Correo electrónico</div>
+          <input class="field" id="reg-email" type="email" placeholder="usuario@empresa.com" autocomplete="email">
+          <div class="field-error" id="err-email">Ingresa un correo electrónico válido</div>
+
+          <div class="field-label">Contraseña</div>
+          <input class="field" id="reg-pass" type="password" placeholder="Mínimo 6 caracteres" autocomplete="new-password">
+          <div class="field-error" id="err-pass">La contraseña debe tener al menos 6 caracteres</div>
+
+          <div class="field-label">Confirmar contraseña</div>
+          <input class="field" id="reg-pass2" type="password" placeholder="Repite tu contraseña" autocomplete="new-password">
+          <div class="field-error" id="err-pass2">Las contraseñas no coinciden</div>
+
+          <button class="btn-auth" id="register-btn">Crear cuenta</button>
+
+          <div class="divider-row">
+            <div class="divider-line"></div>
+            <span class="divider-text">¿Ya tienes cuenta?</span>
+            <div class="divider-line"></div>
+          </div>
+
+          <div class="hint-link" id="hint-to-login">← Iniciar sesión</div>
         </div>
+
       </div>
 
     </div>
   </main>
 
 </div>
-    <script>
-    (() => {
-      const loginBtn = document.querySelector('.btn-auth');
-      const fields = document.querySelectorAll('.field');
-      const emailInput = fields[0];
-      const passInput = fields[1];
+<script>
+(() => {
+  /* ── Storage helpers ── */
+  function getUsers() {
+    try { return JSON.parse(localStorage.getItem('ip_users') || '[]'); } catch (e) { return []; }
+  }
 
-      const doLogin = async () => {
-        const usuario = (emailInput.value || 'usuario-demo').trim();
-        const password = (passInput.value || '1234').trim();
+  function saveUsers(users) {
+    localStorage.setItem('ip_users', JSON.stringify(users));
+  }
 
-        loginBtn.disabled = true;
-        loginBtn.textContent = 'Ingresando...';
+  /* ── DOM refs ── */
+  const tabLogin    = document.getElementById('tab-login');
+  const tabReg      = document.getElementById('tab-register');
+  const formLogin   = document.getElementById('form-login');
+  const formReg     = document.getElementById('form-register');
+  const cardTitle   = document.getElementById('card-title');
+  const cardSub     = document.getElementById('card-sub');
+  const alertBox    = document.getElementById('alert-box');
+  const hintToReg   = document.getElementById('hint-to-register');
+  const hintToLogin = document.getElementById('hint-to-login');
 
-        try {
-          const qs = new URLSearchParams({ usuario, password }).toString();
-          const response = await fetch('http://localhost:8080/api/login?' + qs);
-          if (!response.ok) {
-            throw new Error('No se pudo iniciar sesion');
-          }
+  /* ── Alert helpers ── */
+  function showAlert(msg, type) {
+    alertBox.textContent = msg;
+    alertBox.className = 'alert-box alert-' + type + ' visible';
+  }
+
+  function hideAlert() {
+    alertBox.className = 'alert-box alert-error';
+    alertBox.textContent = '';
+  }
+
+  /* ── Tab switching ── */
+  function switchTab(tab) {
+    hideAlert();
+    if (tab === 'login') {
+      tabLogin.classList.add('active');
+      tabReg.classList.remove('active');
+      formLogin.style.display = 'block';
+      formReg.style.display = 'none';
+      cardTitle.textContent = 'Bienvenido';
+      cardSub.textContent = 'Accede al sistema de procesamiento distribuido de imágenes';
+    } else {
+      tabReg.classList.add('active');
+      tabLogin.classList.remove('active');
+      formLogin.style.display = 'none';
+      formReg.style.display = 'block';
+      cardTitle.textContent = 'Crear cuenta';
+      cardSub.textContent = 'Regístrate para acceder al sistema de procesamiento';
+    }
+  }
+
+  tabLogin.addEventListener('click', () => switchTab('login'));
+  tabReg.addEventListener('click', () => switchTab('register'));
+  if (hintToReg)   hintToReg.addEventListener('click',   () => switchTab('register'));
+  if (hintToLogin) hintToLogin.addEventListener('click', () => switchTab('login'));
+
+  /* Check URL hash for direct register link */
+  if (window.location.hash === '#register') {
+    switchTab('register');
+  }
+
+  /* ── Validation helpers ── */
+  function setError(fieldId, errId, show) {
+    const field = document.getElementById(fieldId);
+    const err   = document.getElementById(errId);
+    if (!field || !err) return;
+    if (show) {
+      field.classList.add('invalid');
+      err.classList.add('visible');
+    } else {
+      field.classList.remove('invalid');
+      err.classList.remove('visible');
+    }
+  }
+
+  function clearErrors() {
+    document.querySelectorAll('.field').forEach(f => f.classList.remove('invalid'));
+    document.querySelectorAll('.field-error').forEach(e => e.classList.remove('visible'));
+  }
+
+  /* ── LOGIN ── */
+  const loginBtn  = document.getElementById('login-btn');
+  const loginEmail = document.getElementById('login-email');
+  const loginPass  = document.getElementById('login-pass');
+
+  const DEMO_USERS = [
+    { correo: 'admin@imageproc.com', password: 'admin123', nombres: 'Admin',  apellidos: 'Sistema' },
+    { correo: 'user@imageproc.com',  password: 'user123',  nombres: 'Usuario', apellidos: 'Demo' }
+  ];
+
+  async function doLogin() {
+    hideAlert();
+    const email = (loginEmail.value || '').trim();
+    const pass  = (loginPass.value  || '').trim();
+
+    if (!email || !pass) {
+      showAlert('Por favor ingresa tu correo y contraseña.', 'error');
+      return;
+    }
+
+    loginBtn.disabled = true;
+    loginBtn.textContent = 'Ingresando...';
+
+    /* Check localStorage users first, then demo credentials */
+    const allUsers = [...DEMO_USERS, ...getUsers()];
+    const found = allUsers.find(u => u.correo === email && u.password === pass);
+
+    if (found) {
+      /* Local auth success */
+      localStorage.setItem('usuarioSesion', email);
+      localStorage.setItem('nombreSesion', found.nombres + ' ' + found.apellidos);
+      /* Also try backend */
+      try {
+        const qs = new URLSearchParams({ usuario: email, password: pass }).toString();
+        const response = await fetch('http://localhost:8080/api/login?' + qs);
+        if (response.ok) {
           const data = await response.json();
           localStorage.setItem('tokenSesion', data.token);
-          localStorage.setItem('usuarioSesion', data.usuario || usuario);
-          window.location.href = '02_upload.html';
-        } catch (error) {
-          alert('Error de conexion con el backend visual. Inicia VisualDemoServerMain.');
-          loginBtn.disabled = false;
-          loginBtn.textContent = 'Iniciar sesion';
+        } else {
+          localStorage.setItem('tokenSesion', 'local-' + Date.now());
         }
-      };
+      } catch (_) {
+        localStorage.setItem('tokenSesion', 'local-' + Date.now());
+      }
+      window.location.href = '02_upload.html';
+      return;
+    }
 
-      loginBtn.addEventListener('click', doLogin);
-    })();
-    </script>
-    <script src="navigation.js"></script>
+    /* Fallback: try backend only */
+    try {
+      const qs = new URLSearchParams({ usuario: email, password: pass }).toString();
+      const response = await fetch('http://localhost:8080/api/login?' + qs);
+      if (!response.ok) throw new Error('Credenciales incorrectas');
+      const data = await response.json();
+      localStorage.setItem('tokenSesion', data.token);
+      localStorage.setItem('usuarioSesion', data.usuario || email);
+      window.location.href = '02_upload.html';
+    } catch (_) {
+      showAlert('Correo o contraseña incorrectos.', 'error');
+      loginBtn.disabled = false;
+      loginBtn.textContent = 'Iniciar sesión';
+    }
+  }
+
+  loginBtn.addEventListener('click', doLogin);
+  [loginEmail, loginPass].forEach(f => f.addEventListener('keydown', e => { if (e.key === 'Enter') doLogin(); }));
+
+  /* ── REGISTER ── */
+  const registerBtn = document.getElementById('register-btn');
+
+  function doRegister() {
+    hideAlert();
+    clearErrors();
+
+    const nombres   = document.getElementById('reg-nombres').value.trim();
+    const apellidos = document.getElementById('reg-apellidos').value.trim();
+    const cedula    = document.getElementById('reg-cedula').value.trim();
+    const email     = document.getElementById('reg-email').value.trim();
+    const pass      = document.getElementById('reg-pass').value;
+    const pass2     = document.getElementById('reg-pass2').value;
+
+    let valid = true;
+
+    if (!nombres) {
+      setError('reg-nombres', 'err-nombres', true); valid = false;
+    }
+    if (!apellidos) {
+      setError('reg-apellidos', 'err-apellidos', true); valid = false;
+    }
+    if (!cedula || !/^\d{6,12}$/.test(cedula)) {
+      setError('reg-cedula', 'err-cedula', true); valid = false;
+    }
+    if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      setError('reg-email', 'err-email', true); valid = false;
+    }
+    if (!pass || pass.length < 6) {
+      setError('reg-pass', 'err-pass', true); valid = false;
+    }
+    if (pass !== pass2) {
+      setError('reg-pass2', 'err-pass2', true); valid = false;
+    }
+
+    if (!valid) return;
+
+    /* Check duplicate email */
+    const users = getUsers();
+    const allUsers = [...DEMO_USERS, ...users];
+    if (allUsers.find(u => u.correo === email)) {
+      showAlert('Ya existe una cuenta con ese correo.', 'error');
+      setError('reg-email', 'err-email', true);
+      document.getElementById('err-email').textContent = 'Ya existe una cuenta con ese correo';
+      return;
+    }
+
+    /* Save new user */
+    users.push({ nombres, apellidos, cedula, correo: email, password: pass });
+    saveUsers(users);
+
+    showAlert('¡Cuenta creada exitosamente! Ahora puedes iniciar sesión.', 'success');
+
+    /* Pre-fill login form and switch to login tab */
+    setTimeout(() => {
+      loginEmail.value = email;
+      loginPass.value  = pass;
+      switchTab('login');
+    }, 1500);
+  }
+
+  registerBtn.addEventListener('click', doRegister);
+
+  /* Enter key on last field triggers register */
+  document.getElementById('reg-pass2').addEventListener('keydown', e => {
+    if (e.key === 'Enter') doRegister();
+  });
+
+  /* Cédula: only allow digits */
+  document.getElementById('reg-cedula').addEventListener('input', function () {
+    this.value = this.value.replace(/\D/g, '');
+  });
+})();
+</script>
+<script src="navigation.js"></script>
 </body>
 </html>

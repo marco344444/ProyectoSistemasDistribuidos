@@ -14,8 +14,8 @@
     .stat-val.green  { color: var(--green); }
     .stat-val.amber  { color: var(--amber); }
     .stat-val.accent { color: var(--accent); }
-    .table-wrap { background: var(--bg2); border: 0.5px solid var(--border); border-radius: 14px; overflow: hidden; }
-    table { width: 100%; border-collapse: collapse; }
+    .table-wrap { background: var(--bg2); border: 0.5px solid var(--border); border-radius: 14px; overflow: hidden; overflow-x: auto; -webkit-overflow-scrolling: touch; }
+    table { width: 100%; border-collapse: collapse; min-width: 680px; }
     thead tr { background: var(--bg3); border-bottom: 0.5px solid var(--border); }
     thead th { padding: 12px 16px; text-align: left; font-size: 10px; font-weight: 700; color: var(--text3); letter-spacing: 1px; white-space: nowrap; }
     tbody tr { border-bottom: 0.5px solid var(--border); cursor: pointer; transition: background 0.1s; }
@@ -32,6 +32,19 @@
     .filter-btn { background: var(--bg3); border: 0.5px solid var(--border); border-radius: 9px; padding: 9px 16px; font-size: 14px; color: var(--text2); cursor: pointer; display: flex; align-items: center; gap: 7px; }
     .filter-btn svg { width: 13px; height: 13px; }
     .btn-new { background: var(--accent); border: none; border-radius: 9px; padding: 9px 20px; font-size: 14px; font-weight: 700; color: #fff; cursor: pointer; }
+
+    @media (max-width: 767px) {
+      .body { padding: 18px 14px; }
+      .stats-row { grid-template-columns: repeat(2, 1fr); gap: 8px; margin-bottom: 18px; }
+      .stat { padding: 12px 14px; }
+      .stat-val { font-size: 20px; }
+      .filter-btn { display: none; }
+    }
+
+    @media (max-width: 1023px) and (min-width: 768px) {
+      .stats-row { grid-template-columns: repeat(2, 1fr); }
+      .body { padding: 20px 20px; }
+    }
   </style>
 </head>
 <body>

@@ -9,7 +9,7 @@
     .body { flex: 1; display: grid; grid-template-columns: 1fr 340px; overflow: hidden; min-height: 0; }
     .panel-left { padding: 28px 36px; overflow-y: auto; border-right: 0.5px solid var(--border); }
     .dropzone { border: 1.5px dashed var(--border2); border-radius: 14px; padding: 36px 24px; text-align: center; margin-bottom: 24px; cursor: pointer; transition: all 0.15s; }
-    .dropzone:hover { border-color: var(--accent); background: var(--accent-glow); }
+    .dropzone:hover, .dropzone.dragover { border-color: var(--accent); background: var(--accent-glow); }
     .dz-icon { width: 48px; height: 48px; background: var(--bg3); border: 0.5px solid var(--border2); border-radius: 12px; display: flex; align-items: center; justify-content: center; margin: 0 auto 14px; }
     .dz-icon svg { width: 22px; height: 22px; }
     .dz-title { font-size: 16px; font-weight: 600; color: var(--text); margin-bottom: 4px; }
@@ -39,6 +39,17 @@
     .dot-amber { background: var(--amber); }
     .node-name { flex: 1; color: var(--text); font-weight: 500; font-size: 13px; }
     .node-load { font-size: 12px; }
+
+    @media (max-width: 767px) {
+      .body { grid-template-columns: 1fr; overflow: visible; }
+      .panel-left { padding: 18px 14px; border-right: none; border-bottom: 0.5px solid var(--border); }
+      .panel-right { border-left: none; padding: 18px 14px; overflow: visible; }
+      .dropzone { padding: 24px 16px; }
+    }
+
+    @media (max-width: 1023px) and (min-width: 768px) {
+      .body { grid-template-columns: 1fr 280px; }
+    }
   </style>
 </head>
 <body>
