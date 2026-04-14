@@ -149,9 +149,19 @@
       cursor: pointer;
       color: var(--text2);
       transition: all 0.15s;
+      border: none;
+      background: transparent;
     }
 
     .tab.active { background: var(--accent); color: #fff; font-weight: 600; }
+
+    .auth-form {
+      display: none;
+    }
+
+    .auth-form.active {
+      display: block;
+    }
 
     .field-label {
       font-size: 12px;
@@ -209,6 +219,16 @@
       cursor: pointer;
     }
 
+    .form-msg {
+      margin-top: 12px;
+      font-size: 12px;
+      min-height: 18px;
+      color: var(--text2);
+    }
+
+    .form-msg.error { color: var(--red); }
+    .form-msg.success { color: var(--green); }
+
     .demo-box {
       background: var(--bg3);
       border: 0.5px solid var(--border);
@@ -233,6 +253,37 @@
     }
 
     .demo-row:last-child { margin-bottom: 0; }
+
+    @media (max-width: 1024px) {
+      .main {
+        padding: 24px 16px;
+      }
+
+      .auth-container {
+        gap: 28px;
+      }
+
+      .auth-card {
+        width: 100%;
+        max-width: 430px;
+      }
+    }
+
+    @media (max-width: 860px) {
+      .auth-container {
+        flex-direction: column;
+      }
+
+      .auth-info,
+      .auth-card {
+        width: 100%;
+        max-width: 100%;
+      }
+
+      .auth-card {
+        padding: 24px 18px;
+      }
+    }
   </style>
 </head>
 <body>
@@ -327,31 +378,54 @@
         <div class="card-title">Bienvenido</div>
         <div class="card-sub">Accede al sistema de procesamiento distribuido de imágenes</div>
 
-        <div class="tabs">
-          <div class="tab active">Iniciar sesión</div>
-          <div class="tab">Registrarse</div>
+        <div class="tabs" role="tablist" aria-label="Acceso y registro">
+          <button class="tab active" type="button" data-tab="login">Iniciar sesión</button>
+          <button class="tab" type="button" data-tab="register">Registrarse</button>
         </div>
 
-        <div class="field-label">Correo electrónico</div>
-        <input class="field" type="email" placeholder="usuario@empresa.com">
+        <form class="auth-form active" id="loginForm" novalidate>
+          <div class="field-label">Correo electrónico</div>
+          <input class="field" id="loginEmail" type="email" placeholder="usuario@empresa.com" required>
 
-        <div class="field-label">Contraseña</div>
-        <input class="field" type="password" placeholder="••••••••">
+          <div class="field-label">Contraseña</div>
+          <input class="field" id="loginPassword" type="password" placeholder="••••••••" required>
 
-        <button class="btn-auth">Iniciar sesión</button>
+          <button class="btn-auth" id="loginBtn" type="submit">Iniciar sesión</button>
+          <div class="form-msg" id="loginMsg"></div>
+        </form>
+
+        <form class="auth-form" id="registerForm" novalidate>
+          <div class="field-label">Nombres</div>
+          <input class="field" id="regNombres" type="text" placeholder="Ej: Maria Fernanda" required>
+
+          <div class="field-label">Apellidos</div>
+          <input class="field" id="regApellidos" type="text" placeholder="Ej: Gomez Rojas" required>
+
+          <div class="field-label">Cedula</div>
+          <input class="field" id="regCedula" type="text" placeholder="Ej: 1023456789" required>
+
+          <div class="field-label">Correo</div>
+          <input class="field" id="regCorreo" type="email" placeholder="usuario@empresa.com" required>
+
+          <div class="field-label">Password</div>
+          <input class="field" id="regPassword" type="password" placeholder="Mínimo 6 caracteres" required>
+
+          <button class="btn-auth" id="registerBtn" type="submit">Crear cuenta</button>
+          <div class="form-msg" id="registerMsg"></div>
+        </form>
 
         <div class="divider-row">
           <div class="divider-line"></div>
-          <span class="divider-text">¿No tienes cuenta?</span>
+          <span class="divider-text" id="hintText">¿No tienes cuenta?</span>
           <div class="divider-line"></div>
         </div>
 
-        <div class="hint-link">Crear cuenta nueva →</div>
+        <div class="hint-link" id="hintLink">Crear cuenta nueva →</div>
 
-        <div class="demo-box">
+        <div class="demo-box" id="demoBox">
           <div class="demo-label">CREDENCIALES DE PRUEBA</div>
-          <div class="demo-row">admin@imageproc.com  ·  admin123</div>
-          <div class="demo-row">user@imageproc.com   ·  user123</div>
+          <div class="demo-row">admin@imageproc.com · admin123</div>
+          <div class="demo-row">user@imageproc.com · user123</div>
         </div>
       </div>
 
@@ -361,36 +435,155 @@
 </div>
     <script>
     (() => {
-      const loginBtn = document.querySelector('.btn-auth');
-      const fields = document.querySelectorAll('.field');
-      const emailInput = fields[0];
-      const passInput = fields[1];
+      const tabs = Array.from(document.querySelectorAll('.tab'));
+      const loginForm = document.getElementById('loginForm');
+      const registerForm = document.getElementById('registerForm');
+      const hintText = document.getElementById('hintText');
+      const hintLink = document.getElementById('hintLink');
+      const demoBox = document.getElementById('demoBox');
 
-      const doLogin = async () => {
-        const usuario = (emailInput.value || 'usuario-demo').trim();
-        const password = (passInput.value || '1234').trim();
+      const loginEmail = document.getElementById('loginEmail');
+      const loginPassword = document.getElementById('loginPassword');
+      const loginBtn = document.getElementById('loginBtn');
+      const loginMsg = document.getElementById('loginMsg');
+
+      const regNombres = document.getElementById('regNombres');
+      const regApellidos = document.getElementById('regApellidos');
+      const regCedula = document.getElementById('regCedula');
+      const regCorreo = document.getElementById('regCorreo');
+      const regPassword = document.getElementById('regPassword');
+      const registerBtn = document.getElementById('registerBtn');
+      const registerMsg = document.getElementById('registerMsg');
+
+      let activeTab = 'login';
+
+      const showMsg = (el, text, kind) => {
+        el.textContent = text || '';
+        el.className = 'form-msg' + (kind ? ' ' + kind : '');
+      };
+
+      const setTab = (tab) => {
+        activeTab = tab;
+        tabs.forEach((btn) => {
+          const on = btn.dataset.tab === tab;
+          btn.classList.toggle('active', on);
+        });
+
+        const loginOn = tab === 'login';
+        loginForm.classList.toggle('active', loginOn);
+        registerForm.classList.toggle('active', !loginOn);
+        demoBox.style.display = loginOn ? 'block' : 'none';
+
+        hintText.textContent = loginOn ? '¿No tienes cuenta?' : '¿Ya tienes cuenta?';
+        hintLink.textContent = loginOn ? 'Crear cuenta nueva →' : 'Volver a iniciar sesión →';
+
+        if (loginOn) {
+          showMsg(registerMsg, '', '');
+        } else {
+          showMsg(loginMsg, '', '');
+        }
+      };
+
+      tabs.forEach((btn) => {
+        btn.addEventListener('click', () => setTab(btn.dataset.tab));
+      });
+
+      hintLink.addEventListener('click', () => {
+        setTab(activeTab === 'login' ? 'register' : 'login');
+      });
+
+      loginForm.addEventListener('submit', async (ev) => {
+        ev.preventDefault();
+        const usuario = (loginEmail.value || '').trim();
+        const password = (loginPassword.value || '').trim();
+
+        if (!usuario || !password) {
+          showMsg(loginMsg, 'Completa correo y contraseña.', 'error');
+          return;
+        }
 
         loginBtn.disabled = true;
         loginBtn.textContent = 'Ingresando...';
+        showMsg(loginMsg, '', '');
 
         try {
           const qs = new URLSearchParams({ usuario, password }).toString();
           const response = await fetch('http://localhost:8080/api/login?' + qs);
           if (!response.ok) {
-            throw new Error('No se pudo iniciar sesion');
+            let msg = 'No se pudo iniciar sesion.';
+            try {
+              const body = await response.json();
+              msg = body.error || msg;
+            } catch (e) {
+              // Ignorado: se mantiene mensaje por defecto.
+            }
+            throw new Error(msg);
           }
+
           const data = await response.json();
           localStorage.setItem('tokenSesion', data.token);
           localStorage.setItem('usuarioSesion', data.usuario || usuario);
           window.location.href = '02_upload.html';
         } catch (error) {
-          alert('Error de conexion con el backend visual. Inicia VisualDemoServerMain.');
+          showMsg(loginMsg, error.message || 'Error de conexion con el backend visual.', 'error');
           loginBtn.disabled = false;
-          loginBtn.textContent = 'Iniciar sesion';
+          loginBtn.textContent = 'Iniciar sesión';
         }
-      };
+      });
 
-      loginBtn.addEventListener('click', doLogin);
+      registerForm.addEventListener('submit', async (ev) => {
+        ev.preventDefault();
+
+        const nombres = (regNombres.value || '').trim();
+        const apellidos = (regApellidos.value || '').trim();
+        const cedula = (regCedula.value || '').trim();
+        const correo = (regCorreo.value || '').trim().toLowerCase();
+        const password = (regPassword.value || '').trim();
+
+        if (!nombres || !apellidos || !cedula || !correo || !password) {
+          showMsg(registerMsg, 'Completa todos los campos del registro.', 'error');
+          return;
+        }
+        if (password.length < 6) {
+          showMsg(registerMsg, 'El password debe tener al menos 6 caracteres.', 'error');
+          return;
+        }
+
+        registerBtn.disabled = true;
+        registerBtn.textContent = 'Creando cuenta...';
+        showMsg(registerMsg, '', '');
+
+        try {
+          const qs = new URLSearchParams({ nombres, apellidos, cedula, correo, password }).toString();
+          const response = await fetch('http://localhost:8080/api/registro?' + qs);
+          if (!response.ok) {
+            let msg = 'No se pudo crear la cuenta.';
+            try {
+              const body = await response.json();
+              msg = body.error || msg;
+            } catch (e) {
+              // Ignorado: se mantiene mensaje por defecto.
+            }
+            throw new Error(msg);
+          }
+
+          showMsg(registerMsg, 'Registro exitoso. Ahora inicia sesión.', 'success');
+          loginEmail.value = correo;
+          loginPassword.value = '';
+          registerForm.reset();
+
+          setTimeout(() => {
+            setTab('login');
+          }, 600);
+        } catch (error) {
+          showMsg(registerMsg, error.message || 'Error de conexion con el backend visual.', 'error');
+        } finally {
+          registerBtn.disabled = false;
+          registerBtn.textContent = 'Crear cuenta';
+        }
+      });
+
+      setTab('login');
     })();
     </script>
     <script src="navigation.js"></script>

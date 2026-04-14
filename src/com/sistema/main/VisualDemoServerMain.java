@@ -24,6 +24,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.Comparator;
+import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -32,6 +33,7 @@ import java.util.concurrent.CopyOnWriteArrayList;
 public class VisualDemoServerMain {
 
     private static final List<LoteDemo> LOTES = new CopyOnWriteArrayList<>();
+    private static final Map<String, UsuarioDemo> USUARIOS = new HashMap<>();
 
     public static void main(String[] args) {
         try {
@@ -54,6 +56,8 @@ public class VisualDemoServerMain {
 
             HttpServer httpServer = HttpServer.create(new InetSocketAddress(8080), 0);
 
+            inicializarUsuariosDemo();
+
             httpServer.createContext("/api/health", exchange -> {
                 if (!"GET".equalsIgnoreCase(exchange.getRequestMethod())) {
                     sendJson(exchange, 405, "{\"error\":\"Method not allowed\"}");
@@ -71,8 +75,49 @@ public class VisualDemoServerMain {
                 String usuario = params.getOrDefault("usuario", "usuario-demo");
                 String password = params.getOrDefault("password", "1234");
 
+                UsuarioDemo usuarioEncontrado;
+                synchronized (USUARIOS) {
+                    usuarioEncontrado = USUARIOS.get(usuario.toLowerCase());
+                }
+                if (usuarioEncontrado == null || !usuarioEncontrado.password.equals(password)) {
+                    sendJson(exchange, 401, "{\"error\":\"Credenciales invalidas\"}");
+                    return;
+                }
+
                 String token = soap.iniciarSesion(usuario, password);
-                String json = "{\"token\":\"" + jsonEscape(token) + "\",\"usuario\":\"" + jsonEscape(usuario) + "\"}";
+                String json = "{\"token\":\"" + jsonEscape(token) + "\",\"usuario\":\"" + jsonEscape(usuarioEncontrado.correo) + "\",\"nombre\":\""
+                        + jsonEscape(usuarioEncontrado.nombres + " " + usuarioEncontrado.apellidos) + "\"}";
+                sendJson(exchange, 200, json);
+            });
+
+            httpServer.createContext("/api/registro", exchange -> {
+                if (!"GET".equalsIgnoreCase(exchange.getRequestMethod())) {
+                    sendJson(exchange, 405, "{\"error\":\"Method not allowed\"}");
+                    return;
+                }
+
+                Map<String, String> params = parseQuery(exchange.getRequestURI());
+                String nombres = params.getOrDefault("nombres", "").trim();
+                String apellidos = params.getOrDefault("apellidos", "").trim();
+                String cedula = params.getOrDefault("cedula", "").trim();
+                String correo = params.getOrDefault("correo", "").trim().toLowerCase();
+                String password = params.getOrDefault("password", "").trim();
+
+                if (nombres.isEmpty() || apellidos.isEmpty() || cedula.isEmpty() || correo.isEmpty() || password.isEmpty()) {
+                    sendJson(exchange, 400, "{\"error\":\"Todos los campos son obligatorios\"}");
+                    return;
+                }
+
+                synchronized (USUARIOS) {
+                    if (USUARIOS.containsKey(correo)) {
+                        sendJson(exchange, 409, "{\"error\":\"El correo ya esta registrado\"}");
+                        return;
+                    }
+
+                    USUARIOS.put(correo, new UsuarioDemo(nombres, apellidos, cedula, correo, password));
+                }
+
+                String json = "{\"ok\":true,\"correo\":\"" + jsonEscape(correo) + "\",\"mensaje\":\"Registro exitoso\"}";
                 sendJson(exchange, 200, json);
             });
 
@@ -276,6 +321,30 @@ public class VisualDemoServerMain {
 
     private static String jsonEscape(String value) {
         return value == null ? "" : value.replace("\\", "\\\\").replace("\"", "\\\"");
+    }
+
+    private static void inicializarUsuariosDemo() {
+        synchronized (USUARIOS) {
+            USUARIOS.clear();
+            USUARIOS.put("admin@imageproc.com", new UsuarioDemo("Admin", "Sistema", "1000000001", "admin@imageproc.com", "admin123"));
+            USUARIOS.put("user@imageproc.com", new UsuarioDemo("Usuario", "Demo", "1000000002", "user@imageproc.com", "user123"));
+        }
+    }
+
+    private static class UsuarioDemo {
+        String nombres;
+        String apellidos;
+        String cedula;
+        String correo;
+        String password;
+
+        UsuarioDemo(String nombres, String apellidos, String cedula, String correo, String password) {
+            this.nombres = nombres;
+            this.apellidos = apellidos;
+            this.cedula = cedula;
+            this.correo = correo;
+            this.password = password;
+        }
     }
 
     private static class LoteDemo {

@@ -39,6 +39,37 @@
     .btn-zip { width: 100%; background: var(--accent); border: none; border-radius: 9px; padding: 12px; font-size: 14px; font-weight: 700; color: #fff; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 7px; }
     .btn-zip svg { width: 14px; height: 14px; }
     .zip-note { font-size: 12px; color: var(--text3); line-height: 1.6; }
+
+    @media (max-width: 1100px) {
+      .body {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    @media (max-width: 760px) {
+      .panel-left,
+      .panel-right {
+        padding: 16px 14px;
+      }
+
+      .batch-info {
+        gap: 12px;
+        padding: 12px;
+      }
+
+      .batch-sep {
+        display: none;
+      }
+
+      .file-row {
+        flex-wrap: wrap;
+      }
+
+      .btn-dl {
+        width: 100%;
+        justify-content: center;
+      }
+    }
   </style>
 </head>
 <body>
