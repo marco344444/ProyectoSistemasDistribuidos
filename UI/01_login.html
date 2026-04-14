@@ -254,6 +254,66 @@
 
     .demo-row:last-child { margin-bottom: 0; }
 
+    .session-box {
+      display: none;
+      background: var(--bg3);
+      border: 0.5px solid var(--border2);
+      border-radius: 14px;
+      padding: 18px;
+    }
+
+    .session-box.active {
+      display: block;
+    }
+
+    .session-chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 5px 12px;
+      border-radius: 999px;
+      background: var(--green-bg);
+      border: 0.5px solid var(--green-border);
+      color: var(--green);
+      font-size: 12px;
+      margin-bottom: 16px;
+    }
+
+    .session-chip-dot {
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: var(--green);
+    }
+
+    .session-name {
+      font-size: 20px;
+      font-weight: 700;
+      color: var(--text);
+      margin-bottom: 6px;
+    }
+
+    .session-email {
+      font-size: 13px;
+      color: var(--text2);
+      margin-bottom: 18px;
+    }
+
+    .session-actions {
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+
+    .session-actions .btn-auth,
+    .session-actions .btn-secondary {
+      width: auto;
+      flex: 1;
+      min-width: 180px;
+      margin-top: 0;
+      justify-content: center;
+    }
+
     @media (max-width: 1024px) {
       .main {
         padding: 24px 16px;
@@ -383,6 +443,16 @@
           <button class="tab" type="button" data-tab="register">Registrarse</button>
         </div>
 
+        <div class="session-box" id="sessionBox">
+          <div class="session-chip"><span class="session-chip-dot"></span>Sesión activa</div>
+          <div class="session-name" id="sessionName">Usuario autenticado</div>
+          <div class="session-email" id="sessionEmail">correo@empresa.com</div>
+          <div class="session-actions">
+            <button class="btn-auth" id="goUploadBtn" type="button">Ir a nueva solicitud</button>
+            <button class="btn-secondary" id="logoutInlineBtn" type="button">Cerrar sesión</button>
+          </div>
+        </div>
+
         <form class="auth-form active" id="loginForm" novalidate>
           <div class="field-label">Correo electrónico</div>
           <input class="field" id="loginEmail" type="email" placeholder="usuario@empresa.com" required>
@@ -441,6 +511,15 @@
       const hintText = document.getElementById('hintText');
       const hintLink = document.getElementById('hintLink');
       const demoBox = document.getElementById('demoBox');
+      const tabsWrap = document.querySelector('.tabs');
+      const dividerRow = document.querySelector('.divider-row');
+      const sessionBox = document.getElementById('sessionBox');
+      const sessionName = document.getElementById('sessionName');
+      const sessionEmail = document.getElementById('sessionEmail');
+      const goUploadBtn = document.getElementById('goUploadBtn');
+      const logoutInlineBtn = document.getElementById('logoutInlineBtn');
+      const cardTitle = document.querySelector('.card-title');
+      const cardSub = document.querySelector('.card-sub');
 
       const loginEmail = document.getElementById('loginEmail');
       const loginPassword = document.getElementById('loginPassword');
@@ -454,8 +533,27 @@
       const regPassword = document.getElementById('regPassword');
       const registerBtn = document.getElementById('registerBtn');
       const registerMsg = document.getElementById('registerMsg');
+      const loginTab = document.querySelector('[data-tab="login"]');
 
       let activeTab = 'login';
+
+      const clearSession = () => {
+        localStorage.removeItem('tokenSesion');
+        localStorage.removeItem('usuarioSesion');
+        localStorage.removeItem('nombreSesion');
+        localStorage.removeItem('idLoteActual');
+      };
+
+      const getSession = () => {
+        const nombre = (localStorage.getItem('nombreSesion') || '').trim();
+        const usuario = (localStorage.getItem('usuarioSesion') || '').trim();
+        const token = (localStorage.getItem('tokenSesion') || '').trim();
+        return {
+          activa: Boolean(token || usuario || nombre),
+          nombre: nombre || usuario,
+          usuario: usuario
+        };
+      };
 
       const showMsg = (el, text, kind) => {
         el.textContent = text || '';
@@ -463,6 +561,11 @@
       };
 
       const setTab = (tab) => {
+        const session = getSession();
+        if (session.activa) {
+          return;
+        }
+
         activeTab = tab;
         tabs.forEach((btn) => {
           const on = btn.dataset.tab === tab;
@@ -482,6 +585,41 @@
         } else {
           showMsg(loginMsg, '', '');
         }
+      };
+
+      const renderAccessState = () => {
+        const session = getSession();
+
+        if (session.activa) {
+          if (loginTab) {
+            loginTab.style.display = 'none';
+          }
+          tabsWrap.style.display = 'none';
+          loginForm.classList.remove('active');
+          registerForm.classList.remove('active');
+          dividerRow.style.display = 'none';
+          hintLink.style.display = 'none';
+          demoBox.style.display = 'none';
+          sessionBox.classList.add('active');
+          sessionName.textContent = session.nombre || 'Sesion activa';
+          sessionEmail.textContent = session.usuario || 'Usuario autenticado';
+          cardTitle.textContent = 'Ya tienes una sesión activa';
+          cardSub.textContent = 'Continua con el flujo o cierra la sesión actual para volver a iniciar.';
+          showMsg(loginMsg, '', '');
+          showMsg(registerMsg, '', '');
+          return;
+        }
+
+        if (loginTab) {
+          loginTab.style.display = '';
+        }
+        tabsWrap.style.display = 'flex';
+        dividerRow.style.display = 'flex';
+        hintLink.style.display = 'block';
+        sessionBox.classList.remove('active');
+        cardTitle.textContent = 'Bienvenido';
+        cardSub.textContent = 'Accede al sistema de procesamiento distribuido de imágenes';
+        setTab(activeTab || 'login');
       };
 
       tabs.forEach((btn) => {
@@ -523,6 +661,7 @@
           const data = await response.json();
           localStorage.setItem('tokenSesion', data.token);
           localStorage.setItem('usuarioSesion', data.usuario || usuario);
+          localStorage.setItem('nombreSesion', data.nombre || data.usuario || usuario);
           window.location.href = '02_upload.html';
         } catch (error) {
           showMsg(loginMsg, error.message || 'Error de conexion con el backend visual.', 'error');
@@ -583,7 +722,17 @@
         }
       });
 
-      setTab('login');
+      goUploadBtn.addEventListener('click', () => {
+        window.location.href = '02_upload.html';
+      });
+
+      logoutInlineBtn.addEventListener('click', () => {
+        clearSession();
+        activeTab = 'login';
+        renderAccessState();
+      });
+
+      renderAccessState();
     })();
     </script>
     <script src="navigation.js"></script>

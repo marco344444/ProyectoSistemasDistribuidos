@@ -18,22 +18,30 @@ import java.net.InetSocketAddress;
 import java.net.URI;
 import java.net.URLDecoder;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.rmi.registry.LocateRegistry;
 import java.rmi.registry.Registry;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.Comparator;
-import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 public class VisualDemoServerMain {
 
     private static final List<LoteDemo> LOTES = new CopyOnWriteArrayList<>();
-    private static final Map<String, UsuarioDemo> USUARIOS = new HashMap<>();
+    private static final Map<String, UsuarioDemo> USUARIOS = new LinkedHashMap<>();
+    private static final Path USUARIOS_JSON_PATH = Paths.get("data", "usuarios.json");
+    private static final Pattern USUARIO_JSON_PATTERN = Pattern.compile(
+            "\\{\\s*\"nombres\"\\s*:\\s*\"((?:\\\\.|[^\"\\\\])*)\"\\s*,\\s*\"apellidos\"\\s*:\\s*\"((?:\\\\.|[^\"\\\\])*)\"\\s*,\\s*\"cedula\"\\s*:\\s*\"((?:\\\\.|[^\"\\\\])*)\"\\s*,\\s*\"correo\"\\s*:\\s*\"((?:\\\\.|[^\"\\\\])*)\"\\s*,\\s*\"password\"\\s*:\\s*\"((?:\\\\.|[^\"\\\\])*)\"\\s*\\}"
+    );
 
     public static void main(String[] args) {
         try {
@@ -114,7 +122,15 @@ public class VisualDemoServerMain {
                         return;
                     }
 
-                    USUARIOS.put(correo, new UsuarioDemo(nombres, apellidos, cedula, correo, password));
+                    UsuarioDemo nuevoUsuario = new UsuarioDemo(nombres, apellidos, cedula, correo, password);
+                    USUARIOS.put(correo, nuevoUsuario);
+                    try {
+                        guardarUsuariosJson();
+                    } catch (IOException e) {
+                        USUARIOS.remove(correo);
+                        sendJson(exchange, 500, "{\"error\":\"No se pudo guardar el registro provisional\"}");
+                        return;
+                    }
                 }
 
                 String json = "{\"ok\":true,\"correo\":\"" + jsonEscape(correo) + "\",\"mensaje\":\"Registro exitoso\"}";
@@ -326,9 +342,81 @@ public class VisualDemoServerMain {
     private static void inicializarUsuariosDemo() {
         synchronized (USUARIOS) {
             USUARIOS.clear();
-            USUARIOS.put("admin@imageproc.com", new UsuarioDemo("Admin", "Sistema", "1000000001", "admin@imageproc.com", "admin123"));
-            USUARIOS.put("user@imageproc.com", new UsuarioDemo("Usuario", "Demo", "1000000002", "user@imageproc.com", "user123"));
+            try {
+                cargarUsuariosJson();
+            } catch (IOException e) {
+                System.err.println("No se pudo leer data/usuarios.json: " + e.getMessage());
+            }
+
+            if (USUARIOS.isEmpty()) {
+                registrarUsuarioInterno(new UsuarioDemo("Admin", "Sistema", "1000000001", "admin@imageproc.com", "admin123"));
+                registrarUsuarioInterno(new UsuarioDemo("Usuario", "Demo", "1000000002", "user@imageproc.com", "user123"));
+                try {
+                    guardarUsuariosJson();
+                } catch (IOException e) {
+                    System.err.println("No se pudo crear data/usuarios.json: " + e.getMessage());
+                }
+            }
         }
+    }
+
+    private static void registrarUsuarioInterno(UsuarioDemo usuario) {
+        USUARIOS.put(usuario.correo.toLowerCase(), usuario);
+    }
+
+    private static void cargarUsuariosJson() throws IOException {
+        if (!Files.exists(USUARIOS_JSON_PATH)) {
+            return;
+        }
+
+        String contenido = Files.readString(USUARIOS_JSON_PATH, StandardCharsets.UTF_8).trim();
+        if (contenido.isEmpty()) {
+            return;
+        }
+
+        Matcher matcher = USUARIO_JSON_PATTERN.matcher(contenido);
+        while (matcher.find()) {
+            registrarUsuarioInterno(new UsuarioDemo(
+                    jsonUnescape(matcher.group(1)),
+                    jsonUnescape(matcher.group(2)),
+                    jsonUnescape(matcher.group(3)),
+                    jsonUnescape(matcher.group(4)).toLowerCase(),
+                    jsonUnescape(matcher.group(5))
+            ));
+        }
+    }
+
+    private static void guardarUsuariosJson() throws IOException {
+        Path directorio = USUARIOS_JSON_PATH.getParent();
+        if (directorio != null) {
+            Files.createDirectories(directorio);
+        }
+
+        StringBuilder sb = new StringBuilder();
+        sb.append("{\n  \"usuarios\": [\n");
+        int index = 0;
+        for (UsuarioDemo usuario : USUARIOS.values()) {
+            if (index > 0) {
+                sb.append(",\n");
+            }
+            sb.append("    {\"nombres\":\"").append(jsonEscape(usuario.nombres))
+                    .append("\",\"apellidos\":\"").append(jsonEscape(usuario.apellidos))
+                    .append("\",\"cedula\":\"").append(jsonEscape(usuario.cedula))
+                    .append("\",\"correo\":\"").append(jsonEscape(usuario.correo))
+                    .append("\",\"password\":\"").append(jsonEscape(usuario.password))
+                    .append("\"}");
+            index++;
+        }
+        sb.append("\n  ]\n}\n");
+
+        Files.writeString(USUARIOS_JSON_PATH, sb.toString(), StandardCharsets.UTF_8);
+    }
+
+    private static String jsonUnescape(String value) {
+        if (value == null) {
+            return "";
+        }
+        return value.replace("\\\"", "\"").replace("\\\\", "\\");
     }
 
     private static class UsuarioDemo {
