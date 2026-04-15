@@ -4,12 +4,24 @@ import { useNavigate } from 'react-router-dom';
 import { api } from '../services/api';
 import { storage } from '../services/storage';
 
+const AVAILABLE_TRANSFORMATIONS = [
+  { key: 'ESCALA_GRISES', label: 'Escala de grises' },
+  { key: 'ROTAR', label: 'Rotar 90°' },
+  { key: 'REFLEJAR', label: 'Reflejar horizontal' },
+  { key: 'REDIMENSIONAR', label: 'Redimensionar' },
+  { key: 'MARCA_AGUA', label: 'Marca de agua' },
+] as const;
+
 export function useUploadController() {
   const navigate = useNavigate();
   const [cantidad, setCantidad] = useState(3);
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState('');
   const [files, setFiles] = useState<File[]>([]);
+  const [transformacionesSeleccionadas, setTransformacionesSeleccionadas] = useState<string[]>([
+    'ESCALA_GRISES',
+    'ROTAR',
+  ]);
 
   const maxCantidad = useMemo(() => {
     if (files.length === 0) return 400;
@@ -35,12 +47,15 @@ export function useUploadController() {
     }
 
     const clampedCantidad = Math.max(1, Math.min(400, Math.floor(cantidad || files.length || 1)));
+    const selectedFiles = files.slice(0, clampedCantidad);
 
     setLoading(true);
     setMessage('');
 
     try {
-      const response = await api.sendBatch(token, usuario, clampedCantidad);
+      const response = selectedFiles.length > 0
+        ? await api.sendBatchWithFiles(token, usuario, selectedFiles, transformacionesSeleccionadas)
+        : await api.sendBatch(token, usuario, clampedCantidad);
       storage.setBatchId(response.idLote);
       navigate('/status');
     } catch (error) {
@@ -54,10 +69,23 @@ export function useUploadController() {
     cantidad,
     setCantidad,
     files,
+    transformacionesSeleccionadas,
+    availableTransformations: AVAILABLE_TRANSFORMATIONS,
     maxCantidad,
     loading,
     message,
     onFileChange,
+    onToggleTransformacion: (key: string) => {
+      setTransformacionesSeleccionadas((prev) => {
+        if (prev.includes(key)) {
+          if (prev.length === 1) {
+            return prev;
+          }
+          return prev.filter((value) => value !== key);
+        }
+        return [...prev, key];
+      });
+    },
     onSendBatch,
   };
 }

@@ -14,7 +14,29 @@ export function DownloadView() {
         <Topbar
           title={controller.idLote ? `Descargar - ${controller.idLote}` : 'Descargas'}
           subtitle={`${controller.summary.ready} de ${controller.summary.total} imagenes disponibles`}
-          actions={<button className="btn-secondary" onClick={() => navigate('/status')}>Volver</button>}
+          actions={
+            <>
+              <button className="btn-secondary" onClick={() => navigate('/status')}>Volver</button>
+              <button
+                className="btn-primary"
+                onClick={() => {
+                  (controller.data?.archivos || [])
+                    .filter((file) => file.listo)
+                    .forEach((file, index) => {
+                      window.setTimeout(() => {
+                        controller.downloadFile(file.nombre).catch((error) => {
+                          // eslint-disable-next-line no-alert
+                          window.alert((error as Error).message);
+                        });
+                      }, index * 150);
+                    });
+                }}
+                disabled={controller.summary.ready === 0}
+              >
+                Descargar todo
+              </button>
+            </>
+          }
         />
 
         <div className="body download-body">
@@ -39,7 +61,21 @@ export function DownloadView() {
                       <div className="file-meta">Resultado simulado <span className="file-size">{file.tamKb} KB</span></div>
                     </div>
                     <span className={`chip ${file.listo ? 'chip-green' : 'chip-gray'}`}>{file.listo ? 'Lista' : 'Pendiente'}</span>
-                    <button className={`btn-dl ${file.listo ? '' : 'disabled'}`} disabled={!file.listo}>{file.listo ? 'Descargar' : 'No disponible'}</button>
+                    <button
+                      className={`btn-dl ${file.listo ? '' : 'disabled'}`}
+                      disabled={!file.listo}
+                      onClick={() => {
+                        if (!file.listo) {
+                          return;
+                        }
+                        controller.downloadFile(file.nombre).catch((error) => {
+                          // eslint-disable-next-line no-alert
+                          window.alert((error as Error).message);
+                        });
+                      }}
+                    >
+                      {file.listo ? 'Descargar' : 'No disponible'}
+                    </button>
                   </div>
                 );
               })}

@@ -3,7 +3,18 @@ package com.sistema.rmi;
 import com.sistema.distribuido.nodos.INodoTrabajador;
 import com.sistema.distribuido.nodos.ResultadoProcesamiento;
 import com.sistema.distribuido.nodos.Trabajo;
+import com.sistema.model.Archivo;
+import com.sistema.model.TipoTransformacion;
 
+import javax.imageio.ImageIO;
+import java.awt.AlphaComposite;
+import java.awt.Color;
+import java.awt.Graphics2D;
+import java.awt.RenderingHints;
+import java.awt.geom.AffineTransform;
+import java.awt.image.BufferedImage;
+import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
 import java.rmi.RemoteException;
 import java.rmi.server.UnicastRemoteObject;
 import java.time.LocalDateTime;
@@ -18,6 +29,7 @@ import java.util.concurrent.Future;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.stream.Collectors;
 
 public class NodoTrabajadorImpl extends UnicastRemoteObject implements INodoTrabajador {
 
@@ -38,6 +50,7 @@ public class NodoTrabajadorImpl extends UnicastRemoteObject implements INodoTrab
 
         List<String> rutas = Collections.synchronizedList(new ArrayList<>());
         List<String> logs = Collections.synchronizedList(new ArrayList<>());
+        Map<String, byte[]> archivosProcesados = Collections.synchronizedMap(new LinkedHashMap<>());
 
         int cantidad = trabajo.getImagenes() == null ? 0 : trabajo.getImagenes().size();
 
@@ -59,9 +72,17 @@ public class NodoTrabajadorImpl extends UnicastRemoteObject implements INodoTrab
                     Thread.currentThread().interrupt();
                 }
 
-                String nombreSalida = trabajo.getRutaSalida() + "/img_" + idx + "_procesada.jpg";
+                Archivo archivo = trabajo.getImagenes().get(idx);
+                String nombreSalida = trabajo.getIdTrabajo() + "_img_" + idx + "_procesada.png";
                 rutas.add(nombreSalida);
-                String log = LocalDateTime.now() + " - [" + threadName + "] Imagen " + idx + " procesada de forma simulada";
+
+                byte[] bytesProcesados = procesarImagenReal(archivo, idx);
+                archivosProcesados.put(nombreSalida, bytesProcesados);
+
+                String transformaciones = archivo.getTransformaciones() == null
+                        ? "sin transformaciones"
+                        : archivo.getTransformaciones().stream().map(Enum::name).collect(Collectors.joining(","));
+                String log = LocalDateTime.now() + " - [" + threadName + "] Imagen " + idx + " procesada con: " + transformaciones;
                 logs.add(log);
                 System.out.println("[RMI][" + idNodo + "] " + log);
             }));
@@ -81,10 +102,10 @@ public class NodoTrabajadorImpl extends UnicastRemoteObject implements INodoTrab
         totalImagenes.addAndGet(cantidad);
         tiempoAcumuladoMs.addAndGet(duracion);
 
-        String mensaje = "Procesamiento simulado completado para " + cantidad + " imagen(es)";
+        String mensaje = "Procesamiento real completado para " + cantidad + " imagen(es)";
         System.out.println("[RMI][" + idNodo + "] Resultado generado: " + mensaje + " en " + duracion + " ms con " + hilos + " hilo(s)");
 
-        return new ResultadoProcesamiento(true, mensaje, rutas, logs);
+        return new ResultadoProcesamiento(true, mensaje, rutas, logs, archivosProcesados);
     }
 
     @Override
@@ -117,5 +138,153 @@ public class NodoTrabajadorImpl extends UnicastRemoteObject implements INodoTrab
         } catch (Exception e) {
             return 0;
         }
+    }
+
+    private byte[] procesarImagenReal(Archivo archivo, int idx) {
+        try {
+            BufferedImage actual = leerImagen(archivo, idx);
+            List<TipoTransformacion> transformaciones = archivo.getTransformaciones() == null
+                    ? Collections.emptyList()
+                    : archivo.getTransformaciones();
+
+            for (TipoTransformacion transformacion : transformaciones) {
+                switch (transformacion) {
+                    case ESCALA_GRISES:
+                        actual = aplicarEscalaGrises(actual);
+                        break;
+                    case ROTAR:
+                        actual = aplicarRotar90(actual);
+                        break;
+                    case REFLEJAR:
+                        actual = aplicarReflejarHorizontal(actual);
+                        break;
+                    case REDIMENSIONAR:
+                        actual = aplicarRedimensionar(actual, 640, 480);
+                        break;
+                    case MARCA_AGUA:
+                        actual = aplicarMarcaAgua(actual, "ImageProc");
+                        break;
+                    default:
+                        // Otras transformaciones quedan como no-op en esta demo.
+                        break;
+                }
+            }
+
+            return escribirPng(actual);
+        } catch (Exception e) {
+            return escribirPng(crearImagenBase(idx, "error:" + e.getMessage()));
+        }
+    }
+
+    private BufferedImage leerImagen(Archivo archivo, int idx) {
+        try {
+            if (archivo != null && archivo.getContenido() != null && archivo.getContenido().length > 0) {
+                BufferedImage leida = ImageIO.read(new ByteArrayInputStream(archivo.getContenido()));
+                if (leida != null) {
+                    return convertirArgb(leida);
+                }
+            }
+        } catch (Exception ignored) {
+            // fallback a imagen base
+        }
+        String nombre = archivo == null ? "img_" + idx : archivo.getNombre();
+        return crearImagenBase(idx, nombre);
+    }
+
+    private BufferedImage convertirArgb(BufferedImage source) {
+        BufferedImage out = new BufferedImage(source.getWidth(), source.getHeight(), BufferedImage.TYPE_INT_ARGB);
+        Graphics2D g2 = out.createGraphics();
+        g2.drawImage(source, 0, 0, null);
+        g2.dispose();
+        return out;
+    }
+
+    private BufferedImage crearImagenBase(int idx, String label) {
+        BufferedImage img = new BufferedImage(900, 600, BufferedImage.TYPE_INT_ARGB);
+        Graphics2D g = img.createGraphics();
+        g.setColor(new Color(13, 13, 20));
+        g.fillRect(0, 0, img.getWidth(), img.getHeight());
+        g.setColor(new Color(26, 26, 46));
+        g.fillRoundRect(40, 40, 820, 520, 22, 22);
+        g.setColor(new Color(129, 140, 248));
+        g.fillOval(650, 90, 170, 170);
+        g.setColor(new Color(226, 226, 240));
+        g.drawString("ImageProc Demo", 70, 100);
+        g.drawString("Archivo: " + label, 70, 130);
+        g.drawString("Indice: " + idx, 70, 160);
+        g.dispose();
+        return img;
+    }
+
+    private byte[] escribirPng(BufferedImage image) {
+        try {
+            ByteArrayOutputStream output = new ByteArrayOutputStream();
+            ImageIO.write(image, "png", output);
+            return output.toByteArray();
+        } catch (Exception e) {
+            return new byte[0];
+        }
+    }
+
+    private BufferedImage aplicarEscalaGrises(BufferedImage source) {
+        BufferedImage out = new BufferedImage(source.getWidth(), source.getHeight(), BufferedImage.TYPE_INT_ARGB);
+        for (int y = 0; y < source.getHeight(); y++) {
+            for (int x = 0; x < source.getWidth(); x++) {
+                int rgba = source.getRGB(x, y);
+                int a = (rgba >> 24) & 0xff;
+                int r = (rgba >> 16) & 0xff;
+                int g = (rgba >> 8) & 0xff;
+                int b = rgba & 0xff;
+                int gray = (r + g + b) / 3;
+                int outRgba = (a << 24) | (gray << 16) | (gray << 8) | gray;
+                out.setRGB(x, y, outRgba);
+            }
+        }
+        return out;
+    }
+
+    private BufferedImage aplicarRotar90(BufferedImage source) {
+        int w = source.getWidth();
+        int h = source.getHeight();
+        BufferedImage out = new BufferedImage(h, w, BufferedImage.TYPE_INT_ARGB);
+        Graphics2D g = out.createGraphics();
+        g.setRenderingHint(RenderingHints.KEY_INTERPOLATION, RenderingHints.VALUE_INTERPOLATION_BILINEAR);
+        AffineTransform transform = new AffineTransform();
+        transform.translate(h, 0);
+        transform.rotate(Math.toRadians(90));
+        g.drawImage(source, transform, null);
+        g.dispose();
+        return out;
+    }
+
+    private BufferedImage aplicarReflejarHorizontal(BufferedImage source) {
+        int w = source.getWidth();
+        int h = source.getHeight();
+        BufferedImage out = new BufferedImage(w, h, BufferedImage.TYPE_INT_ARGB);
+        Graphics2D g = out.createGraphics();
+        AffineTransform transform = AffineTransform.getScaleInstance(-1, 1);
+        transform.translate(-w, 0);
+        g.drawImage(source, transform, null);
+        g.dispose();
+        return out;
+    }
+
+    private BufferedImage aplicarRedimensionar(BufferedImage source, int targetW, int targetH) {
+        BufferedImage out = new BufferedImage(targetW, targetH, BufferedImage.TYPE_INT_ARGB);
+        Graphics2D g = out.createGraphics();
+        g.setRenderingHint(RenderingHints.KEY_INTERPOLATION, RenderingHints.VALUE_INTERPOLATION_BILINEAR);
+        g.drawImage(source, 0, 0, targetW, targetH, null);
+        g.dispose();
+        return out;
+    }
+
+    private BufferedImage aplicarMarcaAgua(BufferedImage source, String texto) {
+        BufferedImage out = convertirArgb(source);
+        Graphics2D g = out.createGraphics();
+        g.setComposite(AlphaComposite.getInstance(AlphaComposite.SRC_OVER, 0.55f));
+        g.setColor(new Color(129, 140, 248));
+        g.drawString(texto, Math.max(16, out.getWidth() - 140), Math.max(22, out.getHeight() - 24));
+        g.dispose();
+        return out;
     }
 }

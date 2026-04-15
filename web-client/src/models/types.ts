@@ -20,6 +20,9 @@ export type EstadoResponse = {
   estado: string;
   total: number;
   procesadas: number;
+  duracionMs: number;
+  logs: string[];
+  transformaciones: string[];
 };
 
 export type HistorialLote = {

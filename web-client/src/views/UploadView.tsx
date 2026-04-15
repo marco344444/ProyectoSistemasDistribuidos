@@ -54,6 +54,23 @@ export function UploadView() {
               ))}
               {controller.files.length === 0 ? <div className="muted">No hay archivos seleccionados.</div> : null}
             </div>
+
+            <div className="section-label upload-mt">TRANSFORMACIONES DEL BLOQUE</div>
+            <div className="transform-grid">
+              {controller.availableTransformations.map((item) => {
+                const selected = controller.transformacionesSeleccionadas.includes(item.key);
+                return (
+                  <button
+                    key={item.key}
+                    type="button"
+                    className={`transform-chip ${selected ? 'selected' : ''}`}
+                    onClick={() => controller.onToggleTransformacion(item.key)}
+                  >
+                    {item.label}
+                  </button>
+                );
+              })}
+            </div>
             {controller.message ? <div className="form-msg error">{controller.message}</div> : null}
           </div>
 
@@ -62,6 +79,7 @@ export function UploadView() {
             <div className="summary-card">
               <div className="summary-row"><span>Imagenes</span><span className="summary-val">{controller.files.length || controller.cantidad} archivos</span></div>
               <div className="summary-row"><span>Cantidad a enviar</span><span className="summary-val accent">{controller.cantidad}</span></div>
+              <div className="summary-row"><span>Transformaciones</span><span className="summary-val">{controller.transformacionesSeleccionadas.length}</span></div>
               <div className="summary-row"><span>Tiempo estimado</span><span className="summary-val">~45 seg</span></div>
             </div>
           </div>

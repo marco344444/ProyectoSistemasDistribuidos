@@ -39,7 +39,7 @@ export function useStatusController() {
     refreshEstado();
     refreshMetricas();
 
-    const estadoTimer = window.setInterval(refreshEstado, 2000);
+    const estadoTimer = window.setInterval(refreshEstado, 1000);
     const metricasTimer = window.setInterval(refreshMetricas, 5000);
 
     return () => {
@@ -69,6 +69,5 @@ export function useStatusController() {
     error,
     progreso,
     uiEstado,
-    refreshMetricas,
   };
 }

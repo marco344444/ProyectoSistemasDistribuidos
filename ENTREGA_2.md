@@ -7,7 +7,8 @@ Este documento valida los dos criterios solicitados:
 
 ## 1) Clientes
 
-- Cliente web: [UI/01_login.html](UI/01_login.html) -> [UI/02_upload.html](UI/02_upload.html) -> [UI/03_status.html](UI/03_status.html)
+- Cliente web React (`web-client`) con flujo:
+	login -> upload -> status -> download -> history
 
 El cliente web consume endpoints del backend visual:
 
@@ -44,8 +45,16 @@ Resultado esperado:
 .\run-visual-demo.ps1
 ```
 
-2. Abre las interfaces:
+2. Levanta frontend:
 
-- [UI/01_login.html](UI/01_login.html)
+```powershell
+Set-Location .\web-client
+npm install
+npm run dev
+```
 
-3. Realiza solicitudes desde web y verifica respuesta en pantalla y consola.
+3. Abre la interfaz:
+
+- `http://localhost:5173`
+
+4. Realiza solicitudes desde web y verifica respuesta en pantalla y consola.

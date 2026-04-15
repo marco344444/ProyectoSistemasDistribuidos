@@ -53,7 +53,24 @@ export function StatusView() {
                 <div className="consumo-item"><div className="consumo-label">TRABAJOS</div><div className="consumo-val">{controller.metricas?.nodo.trabajosProcesados ?? '-'}</div></div>
                 <div className="consumo-item"><div className="consumo-label">REPLICA BD</div><div className="consumo-val">{controller.metricas?.replica.consistente ? 'OK' : 'N/A'}</div></div>
               </div>
-              <button className="consumo-btn" onClick={controller.refreshMetricas}>Solicitar metricas de consumo</button>
+              <div className="consumo-live">Actualizacion automatica cada 5s</div>
+            </div>
+
+            <div className="consumo-card">
+              <div className="consumo-title">Ejecucion del lote</div>
+              <div className="consumo-grid">
+                <div className="consumo-item"><div className="consumo-label">DURACION</div><div className="consumo-val">{controller.estado?.duracionMs ?? 0} ms</div></div>
+                <div className="consumo-item"><div className="consumo-label">TRANSFORMACIONES</div><div className="consumo-val">{controller.estado?.transformaciones?.join(', ') || 'N/A'}</div></div>
+              </div>
+              <div className="log-list">
+                {(controller.estado?.logs || []).length > 0 ? (
+                  controller.estado?.logs.map((linea, index) => (
+                    <div key={`${linea}-${index}`} className="log-line">{linea}</div>
+                  ))
+                ) : (
+                  <div className="muted">Aun no hay logs para este lote.</div>
+                )}
+              </div>
             </div>
           </div>
         </div>

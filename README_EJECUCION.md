@@ -1,55 +1,43 @@
-# Prototipo Distribuido - Guia de ejecucion
+# Guia Rapida de Ejecucion
 
-Este prototipo implementa un flujo simulado de procesamiento masivo de imagenes:
+Este documento resume la ejecucion del flujo actual (frontend React + backend visual).
 
-Cliente -> SOAP -> Backend -> RMI -> Worker -> Resultado
+## 1) Levantar backend visual
 
-## Estructura principal
+Desde la raiz del repositorio:
 
-- src/com/sistema/rmi: Nodo, servidor y cliente RMI.
-- src/com/sistema/soap: Implementacion del servicio SOAP.
-- src/com/sistema/rest: Repositorio REST simulado en memoria.
-- src/com/sistema/model: Modelos simples de dominio.
-- src/com/sistema/main: Main de integracion completa.
+```powershell
+.\run-visual-demo.ps1
+```
 
-## Requisitos
+Endpoints principales:
 
-- JDK 8+ instalado (debe existir el comando javac y java en PATH).
+- `http://localhost:8080/api/health`
+- `http://localhost:8080/api`
 
-## Compilar
+## 2) Levantar frontend
 
-Desde la carpeta ProyectoSistemasDistribuidos:
+En otra terminal:
 
-PowerShell:
+```powershell
+Set-Location .\web-client
+npm install
+npm run dev
+```
 
-javac -encoding UTF-8 -d out (Get-ChildItem -Path src -Recurse -Filter *.java | Select-Object -ExpandProperty FullName)
+Frontend:
 
-## Ejecutar por etapas (orden recomendado)
+- `http://localhost:5173`
 
-1) RMI servidor:
+## 3) Flujo funcional
 
-java -cp out com.sistema.rmi.ServidorRmiMain
+1. Iniciar sesion.
+2. Crear lote cargando imagenes.
+3. Seleccionar transformaciones del bloque.
+4. Enviar lote.
+5. Revisar estado en tiempo real, logs y duracion.
+6. Descargar imagenes transformadas.
 
-2) RMI cliente (en otra terminal):
+## Nota
 
-java -cp out com.sistema.rmi.ClienteRmiMain
-
-3) Flujo integrado completo (opcional, en una sola ejecucion):
-
-java -cp out com.sistema.main.DemoIntegracionMain
-
-## Resultado esperado en consola
-
-Mensajes similares a:
-
-- Cliente envia lote
-- SOAP recibe solicitud
-- Backend envia trabajo a nodo
-- Worker procesando trabajo
-- Resultado generado
-
-## Notas
-
-- No hay base de datos real: todo se guarda en memoria.
-- El procesamiento de imagenes es mock (simulado).
-- Se preservaron los contratos existentes y no se modificaron sus firmas.
+Para detalle completo, usar `README.md` de la raiz.

@@ -5,6 +5,7 @@ import { storage } from '../services/storage';
 
 export function useDownloadController() {
   const idLote = storage.getBatchId();
+  const token = storage.getToken();
   const [data, setData] = useState<DescargasResponse | null>(null);
   const [error, setError] = useState('');
 
@@ -32,10 +33,29 @@ export function useDownloadController() {
     return { ready, pending, totalKb, total: archivos.length };
   }, [data]);
 
+  const downloadFile = async (fileName: string) => {
+    const safeName = fileName && fileName.trim() ? fileName.trim() : 'resultado.png';
+    if (!token) {
+      throw new Error('No hay sesion activa para descargar');
+    }
+
+    const blob = await api.descargarImagen(token, safeName);
+    const url = window.URL.createObjectURL(blob);
+    const anchor = document.createElement('a');
+    anchor.href = url;
+    anchor.download = safeName;
+    anchor.rel = 'noopener';
+    document.body.appendChild(anchor);
+    anchor.click();
+    document.body.removeChild(anchor);
+    window.URL.revokeObjectURL(url);
+  };
+
   return {
     idLote,
     data,
     error,
     summary,
+    downloadFile,
   };
 }

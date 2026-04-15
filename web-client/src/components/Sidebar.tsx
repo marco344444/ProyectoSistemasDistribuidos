@@ -26,7 +26,6 @@ export function Sidebar({ active }: Props) {
       </div>
 
       <div className="nav-section-label">NAVEGACION</div>
-      <NavItem to="/" label="Acceso" active={active === 'login'} />
       <NavItem to="/upload" label="Nueva solicitud" active={active === 'upload'} />
       <NavItem to="/status" label="Estado" active={active === 'status'} />
       <NavItem to="/download" label="Descargas" active={active === 'download'} />

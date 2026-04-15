@@ -25,6 +25,7 @@ import java.rmi.registry.LocateRegistry;
 import java.rmi.registry.Registry;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Base64;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.LinkedHashMap;
@@ -160,15 +161,65 @@ public class VisualDemoServerMain {
                 loteDemo.estado = "COMPLETADO";
                 loteDemo.fecha = String.valueOf(System.currentTimeMillis());
                 loteDemo.nodos = "worker-visual";
-                loteDemo.duracionMs = 1200L + (long) cantidad * 150L;
-                loteDemo.archivos = new ArrayList<>();
-                for (int i = 1; i <= cantidad; i++) {
-                    loteDemo.archivos.add("img_" + i + "_procesada.jpg");
+                loteDemo.duracionMs = soap.obtenerDuracionLoteMs(idLote);
+                loteDemo.archivos = soap.obtenerResultadosLote(idLote);
+                loteDemo.logs = soap.obtenerLogsLote(idLote);
+                loteDemo.transformaciones = Arrays.asList("ESCALA_GRISES", "ROTAR");
+                if (loteDemo.archivos.isEmpty()) {
+                    loteDemo.archivos = new ArrayList<>();
+                    for (int i = 0; i < cantidad; i++) {
+                        loteDemo.archivos.add(idLote + "_img_" + i + "_procesada.png");
+                    }
                 }
                 LOTES.add(loteDemo);
 
                 String json = "{\"idLote\":\"" + jsonEscape(idLote) + "\",\"cantidad\":" + cantidad + "}";
                 sendJson(exchange, 200, json);
+            });
+
+            httpServer.createContext("/api/enviarLoteArchivos", exchange -> {
+                if ("OPTIONS".equalsIgnoreCase(exchange.getRequestMethod())) {
+                    sendOptions(exchange, "POST, OPTIONS");
+                    return;
+                }
+
+                if (!"POST".equalsIgnoreCase(exchange.getRequestMethod())) {
+                    sendJson(exchange, 405, "{\"error\":\"Method not allowed\"}");
+                    return;
+                }
+                try {
+                    String body = leerBody(exchange);
+                    String token = extraerCampoJson(body, "token");
+                    String usuario = extraerCampoJson(body, "usuario");
+                    List<Archivo> archivos = extraerArchivosDesdeJson(body);
+
+                    if (token.isEmpty() || usuario.isEmpty() || archivos.isEmpty()) {
+                        sendJson(exchange, 400, "{\"error\":\"token, usuario y archivos son obligatorios\"}");
+                        return;
+                    }
+
+                    RequestLote lote = new RequestLote(usuario, archivos);
+                    String idLote = soap.enviarLoteProcesamiento(token, lote);
+
+                    LoteDemo loteDemo = new LoteDemo();
+                    loteDemo.idLote = idLote;
+                    loteDemo.usuario = usuario;
+                    loteDemo.cantidad = archivos.size();
+                    loteDemo.estado = "COMPLETADO";
+                    loteDemo.fecha = String.valueOf(System.currentTimeMillis());
+                    loteDemo.nodos = "worker-visual";
+                    loteDemo.duracionMs = soap.obtenerDuracionLoteMs(idLote);
+                    loteDemo.archivos = soap.obtenerResultadosLote(idLote);
+                    loteDemo.logs = soap.obtenerLogsLote(idLote);
+                    loteDemo.transformaciones = obtenerTransformacionesLote(archivos);
+                    LOTES.add(loteDemo);
+
+                    String json = "{\"idLote\":\"" + jsonEscape(idLote) + "\",\"cantidad\":" + archivos.size() + "}";
+                    sendJson(exchange, 200, json);
+                } catch (Exception e) {
+                    e.printStackTrace();
+                    sendJson(exchange, 500, "{\"error\":\"Fallo procesando lote con archivos: " + jsonEscape(e.getMessage()) + "\"}");
+                }
             });
 
             httpServer.createContext("/api/estado", exchange -> {
@@ -182,8 +233,13 @@ public class VisualDemoServerMain {
                 String idLote = params.getOrDefault("idLote", "");
 
                 EstadoLote estado = soap.consultarEstadoLote(token, idLote);
+                LoteDemo lote = buscarLote(idLote);
                 String json = "{\"idLote\":\"" + jsonEscape(estado.getIdLote()) + "\",\"estado\":\"" + jsonEscape(estado.getEstado())
-                        + "\",\"total\":" + estado.getTotalImagenes() + ",\"procesadas\":" + estado.getProcesadas() + "}";
+                    + "\",\"total\":" + estado.getTotalImagenes() + ",\"procesadas\":" + estado.getProcesadas()
+                    + ",\"duracionMs\":" + (lote == null ? 0 : lote.duracionMs)
+                    + ",\"logs\":" + toJsonArray(lote == null ? Collections.emptyList() : lote.logs)
+                    + ",\"transformaciones\":" + toJsonArray(lote == null ? Collections.emptyList() : lote.transformaciones)
+                    + "}";
                 sendJson(exchange, 200, json);
             });
 
@@ -266,6 +322,25 @@ public class VisualDemoServerMain {
                 sendJson(exchange, 200, sb.toString());
             });
 
+            httpServer.createContext("/api/descargarImagen", exchange -> {
+                if (!"GET".equalsIgnoreCase(exchange.getRequestMethod())) {
+                    sendJson(exchange, 405, "{\"error\":\"Method not allowed\"}");
+                    return;
+                }
+
+                Map<String, String> params = parseQuery(exchange.getRequestURI());
+                String token = params.getOrDefault("token", "");
+                String idResultado = params.getOrDefault("idResultado", "");
+
+                if (token.isEmpty() || idResultado.isEmpty()) {
+                    sendJson(exchange, 400, "{\"error\":\"token e idResultado son obligatorios\"}");
+                    return;
+                }
+
+                byte[] contenido = soap.descargarImagen(token, idResultado);
+                sendBinary(exchange, 200, "image/png", idResultado, contenido);
+            });
+
             httpServer.createContext("/api/metricas", exchange -> {
                 if (!"GET".equalsIgnoreCase(exchange.getRequestMethod())) {
                     sendJson(exchange, 405, "{\"error\":\"Method not allowed\"}");
@@ -343,7 +418,7 @@ public class VisualDemoServerMain {
 
             System.out.println("Servidor visual iniciado en http://localhost:8080");
             System.out.println("Health: http://localhost:8080/api/health");
-            System.out.println("Abre UI/01_login.html para iniciar el flujo visual.");
+            System.out.println("Abre http://localhost:5173 para iniciar el flujo visual.");
         } catch (Exception e) {
             System.err.println("Error iniciando servidor visual: " + e.getMessage());
         }
@@ -398,14 +473,196 @@ public class VisualDemoServerMain {
         return params;
     }
 
+    private static String leerBody(HttpExchange exchange) {
+        try {
+            byte[] bytes = exchange.getRequestBody().readAllBytes();
+            return new String(bytes, StandardCharsets.UTF_8);
+        } catch (IOException e) {
+            return "";
+        }
+    }
+
+    private static String extraerCampoJson(String json, String campo) {
+        if (json == null || json.isEmpty() || campo == null || campo.isEmpty()) {
+            return "";
+        }
+        String marker = "\"" + campo + "\"";
+        int markerIdx = json.indexOf(marker);
+        if (markerIdx < 0) {
+            return "";
+        }
+        int colonIdx = json.indexOf(':', markerIdx + marker.length());
+        if (colonIdx < 0) {
+            return "";
+        }
+        int quoteStart = json.indexOf('"', colonIdx + 1);
+        if (quoteStart < 0) {
+            return "";
+        }
+        int quoteEnd = json.indexOf('"', quoteStart + 1);
+        if (quoteEnd < 0) {
+            return "";
+        }
+        return jsonUnescape(json.substring(quoteStart + 1, quoteEnd));
+    }
+
+    private static List<Archivo> extraerArchivosDesdeJson(String json) {
+        List<Archivo> archivos = new ArrayList<>();
+        if (json == null || json.isEmpty()) {
+            return archivos;
+        }
+
+        int cursor = 0;
+        while (cursor >= 0 && cursor < json.length()) {
+            int nombreKey = json.indexOf("\"nombre\"", cursor);
+            if (nombreKey < 0) {
+                break;
+            }
+
+            int nombreColon = json.indexOf(':', nombreKey);
+            int nombreStart = json.indexOf('"', nombreColon + 1);
+            int nombreEnd = nombreStart < 0 ? -1 : json.indexOf('"', nombreStart + 1);
+            if (nombreStart < 0 || nombreEnd < 0) {
+                break;
+            }
+
+            int contenidoKey = json.indexOf("\"contenidoBase64\"", nombreEnd);
+            if (contenidoKey < 0) {
+                break;
+            }
+
+            int objectStart = json.lastIndexOf('{', nombreKey);
+            int objectEnd = json.indexOf('}', contenidoKey);
+            String bloqueArchivo = (objectStart >= 0 && objectEnd > objectStart)
+                    ? json.substring(objectStart, objectEnd + 1)
+                    : "";
+
+            int contenidoColon = json.indexOf(':', contenidoKey);
+            int contenidoStart = json.indexOf('"', contenidoColon + 1);
+            int contenidoEnd = contenidoStart < 0 ? -1 : json.indexOf('"', contenidoStart + 1);
+            if (contenidoStart < 0 || contenidoEnd < 0) {
+                break;
+            }
+
+            String nombre = jsonUnescape(json.substring(nombreStart + 1, nombreEnd));
+            String base64 = jsonUnescape(json.substring(contenidoStart + 1, contenidoEnd));
+            List<TipoTransformacion> transformaciones = extraerTransformacionesDesdeBloque(bloqueArchivo);
+            if (transformaciones.isEmpty()) {
+                transformaciones = Arrays.asList(TipoTransformacion.ESCALA_GRISES, TipoTransformacion.ROTAR, TipoTransformacion.MARCA_AGUA);
+            }
+            try {
+                byte[] contenido = Base64.getDecoder().decode(base64);
+                archivos.add(new Archivo(
+                        nombre,
+                        contenido,
+                        transformaciones
+                ));
+            } catch (IllegalArgumentException ignored) {
+                // ignorar archivo malformado
+            }
+
+            cursor = contenidoEnd + 1;
+        }
+
+        return archivos;
+    }
+
+    private static List<TipoTransformacion> extraerTransformacionesDesdeBloque(String bloqueArchivo) {
+        if (bloqueArchivo == null || bloqueArchivo.isEmpty()) {
+            return Collections.emptyList();
+        }
+
+        int key = bloqueArchivo.indexOf("\"transformaciones\"");
+        if (key < 0) {
+            return Collections.emptyList();
+        }
+        int arrayStart = bloqueArchivo.indexOf('[', key);
+        int arrayEnd = arrayStart < 0 ? -1 : bloqueArchivo.indexOf(']', arrayStart);
+        if (arrayStart < 0 || arrayEnd < 0 || arrayEnd <= arrayStart) {
+            return Collections.emptyList();
+        }
+
+        String contenido = bloqueArchivo.substring(arrayStart + 1, arrayEnd).trim();
+        if (contenido.isEmpty()) {
+            return Collections.emptyList();
+        }
+
+        List<TipoTransformacion> transformaciones = new ArrayList<>();
+        String[] tokens = contenido.split(",");
+        for (String token : tokens) {
+            String raw = token.trim();
+            if (raw.startsWith("\"") && raw.endsWith("\"") && raw.length() >= 2) {
+                raw = raw.substring(1, raw.length() - 1);
+            }
+            String nombre = jsonUnescape(raw).trim().toUpperCase();
+            try {
+                transformaciones.add(TipoTransformacion.valueOf(nombre));
+            } catch (IllegalArgumentException ignored) {
+                // ignorar transformacion no valida
+            }
+        }
+        return transformaciones;
+    }
+
+    private static List<String> obtenerTransformacionesLote(List<Archivo> archivos) {
+        if (archivos == null || archivos.isEmpty()) {
+            return Collections.emptyList();
+        }
+        Archivo primero = archivos.get(0);
+        if (primero.getTransformaciones() == null || primero.getTransformaciones().isEmpty()) {
+            return Collections.emptyList();
+        }
+        List<String> nombres = new ArrayList<>();
+        for (TipoTransformacion transformacion : primero.getTransformaciones()) {
+            nombres.add(transformacion.name());
+        }
+        return nombres;
+    }
+
+    private static String toJsonArray(List<String> values) {
+        StringBuilder sb = new StringBuilder();
+        sb.append('[');
+        for (int i = 0; i < values.size(); i++) {
+            if (i > 0) {
+                sb.append(',');
+            }
+            sb.append('"').append(jsonEscape(values.get(i))).append('"');
+        }
+        sb.append(']');
+        return sb.toString();
+    }
+
     private static void sendJson(HttpExchange exchange, int statusCode, String json) throws IOException {
         byte[] bytes = json.getBytes(StandardCharsets.UTF_8);
         exchange.getResponseHeaders().add("Content-Type", "application/json; charset=utf-8");
-        exchange.getResponseHeaders().add("Access-Control-Allow-Origin", "*");
+        addCorsHeaders(exchange, "GET, POST, OPTIONS");
         exchange.sendResponseHeaders(statusCode, bytes.length);
         try (OutputStream output = exchange.getResponseBody()) {
             output.write(bytes);
         }
+    }
+
+    private static void sendBinary(HttpExchange exchange, int statusCode, String contentType, String fileName, byte[] bytes) throws IOException {
+        byte[] payload = bytes == null ? new byte[0] : bytes;
+        exchange.getResponseHeaders().add("Content-Type", contentType);
+        addCorsHeaders(exchange, "GET, OPTIONS");
+        exchange.getResponseHeaders().add("Content-Disposition", "attachment; filename=\"" + jsonEscape(fileName) + "\"");
+        exchange.sendResponseHeaders(statusCode, payload.length);
+        try (OutputStream output = exchange.getResponseBody()) {
+            output.write(payload);
+        }
+    }
+
+    private static void sendOptions(HttpExchange exchange, String allowMethods) throws IOException {
+        addCorsHeaders(exchange, allowMethods);
+        exchange.sendResponseHeaders(204, -1);
+        exchange.close();
+    }
+
+    private static void addCorsHeaders(HttpExchange exchange, String allowMethods) {
+        exchange.getResponseHeaders().set("Access-Control-Allow-Origin", "*");
+        exchange.getResponseHeaders().set("Access-Control-Allow-Methods", allowMethods);
+        exchange.getResponseHeaders().set("Access-Control-Allow-Headers", "Content-Type, Authorization");
     }
 
     private static String jsonEscape(String value) {
@@ -517,5 +774,7 @@ public class VisualDemoServerMain {
         String nodos;
         long duracionMs;
         List<String> archivos = Collections.emptyList();
+        List<String> logs = Collections.emptyList();
+        List<String> transformaciones = Collections.emptyList();
     }
 }

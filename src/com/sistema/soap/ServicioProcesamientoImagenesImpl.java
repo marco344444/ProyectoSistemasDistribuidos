@@ -12,7 +12,10 @@ import com.sistema.distribuido.nodos.Trabajo;
 
 import java.nio.charset.StandardCharsets;
 import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
@@ -21,6 +24,10 @@ public class ServicioProcesamientoImagenesImpl implements IServicioProcesamiento
     private final IRepositorioDatos repositorio;
     private final INodoTrabajador nodoTrabajador;
     private final Map<String, String> sesiones = new HashMap<>();
+    private final Map<String, byte[]> resultadosPorId = new LinkedHashMap<>();
+    private final Map<String, List<String>> resultadosPorLote = new LinkedHashMap<>();
+    private final Map<String, List<String>> logsPorLote = new LinkedHashMap<>();
+    private final Map<String, Long> duracionPorLoteMs = new LinkedHashMap<>();
 
     public ServicioProcesamientoImagenesImpl(IRepositorioDatos repositorio, INodoTrabajador nodoTrabajador) {
         this.repositorio = repositorio;
@@ -39,6 +46,7 @@ public class ServicioProcesamientoImagenesImpl implements IServicioProcesamiento
     public String enviarLoteProcesamiento(String tokenSesion, RequestLote lote) {
         validarSesion(tokenSesion);
         String idTrabajo = "JOB-" + UUID.randomUUID();
+        long inicio = System.currentTimeMillis();
 
         System.out.println("[SOAP] SOAP recibe solicitud para lote del usuario " + lote.getIdUsuario());
         repositorio.crearTrabajo(new RegistroTrabajo(idTrabajo, lote.getIdUsuario(), "RECIBIDO", LocalDateTime.now().toString()));
@@ -56,6 +64,13 @@ public class ServicioProcesamientoImagenesImpl implements IServicioProcesamiento
 
             if (resultado.isExito()) {
                 repositorio.actualizarEstadoTrabajo(idTrabajo, "COMPLETADO");
+                synchronized (resultadosPorId) {
+                    resultadosPorLote.put(idTrabajo, new ArrayList<>(resultado.getRutasArchivosGenerados()));
+                    logsPorLote.put(idTrabajo, new ArrayList<>(resultado.getLogsGenerados()));
+                    if (resultado.getArchivosGenerados() != null) {
+                        resultadosPorId.putAll(resultado.getArchivosGenerados());
+                    }
+                }
             } else {
                 repositorio.actualizarEstadoTrabajo(idTrabajo, "ERROR");
             }
@@ -64,6 +79,14 @@ public class ServicioProcesamientoImagenesImpl implements IServicioProcesamiento
         } catch (Exception e) {
             repositorio.actualizarEstadoTrabajo(idTrabajo, "ERROR");
             repositorio.guardarLog(new RegistroLog("R-" + System.currentTimeMillis(), "ERROR", "Fallo RMI: " + e.getMessage(), LocalDateTime.now().toString()));
+        } finally {
+            long duracion = Math.max(0L, System.currentTimeMillis() - inicio);
+            synchronized (resultadosPorId) {
+                duracionPorLoteMs.put(idTrabajo, duracion);
+                if (!logsPorLote.containsKey(idTrabajo)) {
+                    logsPorLote.put(idTrabajo, new ArrayList<>());
+                }
+            }
         }
 
         return idTrabajo;
@@ -83,13 +106,40 @@ public class ServicioProcesamientoImagenesImpl implements IServicioProcesamiento
     @Override
     public byte[] descargarImagen(String tokenSesion, String idResultado) {
         validarSesion(tokenSesion);
-        return ("Imagen simulada para resultado " + idResultado).getBytes(StandardCharsets.UTF_8);
+        synchronized (resultadosPorId) {
+            byte[] data = resultadosPorId.get(idResultado);
+            if (data != null) {
+                return data;
+            }
+        }
+        return ("No encontrado: " + idResultado).getBytes(StandardCharsets.UTF_8);
     }
 
     @Override
     public byte[] descargarLoteZip(String tokenSesion, String idLote) {
         validarSesion(tokenSesion);
         return ("ZIP simulado del lote " + idLote).getBytes(StandardCharsets.UTF_8);
+    }
+
+    public List<String> obtenerResultadosLote(String idLote) {
+        synchronized (resultadosPorId) {
+            List<String> resultados = resultadosPorLote.get(idLote);
+            return resultados == null ? new ArrayList<>() : new ArrayList<>(resultados);
+        }
+    }
+
+    public List<String> obtenerLogsLote(String idLote) {
+        synchronized (resultadosPorId) {
+            List<String> logs = logsPorLote.get(idLote);
+            return logs == null ? new ArrayList<>() : new ArrayList<>(logs);
+        }
+    }
+
+    public long obtenerDuracionLoteMs(String idLote) {
+        synchronized (resultadosPorId) {
+            Long duracion = duracionPorLoteMs.get(idLote);
+            return duracion == null ? 0L : duracion;
+        }
     }
 
     private void validarSesion(String tokenSesion) {

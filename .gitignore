@@ -1,2 +1,4 @@
 out/
+web-client/node_modules/
+web-client/dist/
 
