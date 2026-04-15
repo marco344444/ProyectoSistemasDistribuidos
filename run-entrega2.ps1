@@ -3,14 +3,65 @@ $ErrorActionPreference = "Stop"
 
 Set-Location $PSScriptRoot
 
-$javaHome = "C:\Program Files\Eclipse Adoptium\jdk-17.0.18.8-hotspot\bin"
-$javaExe = Join-Path $javaHome "java.exe"
-$javacExe = Join-Path $javaHome "javac.exe"
+function Resolve-JavaTool {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$ToolName
+    )
 
-if (!(Test-Path $javaExe) -or !(Test-Path $javacExe)) {
-    Write-Host "No se encontro JDK en: $javaHome" -ForegroundColor Red
+    $candidates = @()
+
+    if ($env:JAVA_HOME) {
+        $candidates += (Join-Path $env:JAVA_HOME "bin\$ToolName.exe")
+        $candidates += (Join-Path $env:JAVA_HOME "$ToolName.exe")
+    }
+
+    try {
+        $command = Get-Command $ToolName -ErrorAction Stop
+        if ($command -and $command.Source) {
+            $candidates += $command.Source
+        }
+    } catch {
+    }
+
+    $candidates += @(
+        "C:\Program Files\Eclipse Adoptium\jdk-17.0.18.8-hotspot\bin\$ToolName.exe",
+        "C:\Program Files\Java\jdk-17\bin\$ToolName.exe",
+        "C:\Program Files\Java\jdk-21\bin\$ToolName.exe"
+    )
+
+    foreach ($candidate in ($candidates | Where-Object { $_ } | Select-Object -Unique)) {
+        if (Test-Path $candidate) {
+            return $candidate
+        }
+    }
+
+    return $null
+}
+
+function Get-RuntimeClasspath {
+    $items = @("out")
+
+    if (Test-Path ".\lib") {
+        $jars = Get-ChildItem -Path ".\lib" -Filter *.jar -File -ErrorAction SilentlyContinue
+        foreach ($jar in $jars) {
+            $items += $jar.FullName
+        }
+    }
+
+    return ($items -join [IO.Path]::PathSeparator)
+}
+
+$javaExe = Resolve-JavaTool -ToolName "java"
+$javacExe = Resolve-JavaTool -ToolName "javac"
+
+if (!$javaExe -or !$javacExe) {
+    Write-Host "No se pudo localizar java.exe y javac.exe." -ForegroundColor Red
     exit 1
 }
+
+Write-Host "Usando java:  $javaExe" -ForegroundColor DarkGray
+Write-Host "Usando javac: $javacExe" -ForegroundColor DarkGray
 
 if (Test-Path out) {
     Remove-Item -Recurse -Force out
@@ -23,4 +74,5 @@ Write-Host "Compilando proyecto para Entrega 2..." -ForegroundColor Cyan
 & $javacExe -encoding UTF-8 -d out $srcFiles
 
 Write-Host "Ejecutando smoke test Entrega 2..." -ForegroundColor Cyan
-& $javaExe -cp out com.sistema.main.Entrega2SmokeTestMain
+$runtimeClasspath = Get-RuntimeClasspath
+& $javaExe -cp $runtimeClasspath com.sistema.main.Entrega2SmokeTestMain

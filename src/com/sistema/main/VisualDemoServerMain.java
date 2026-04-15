@@ -2,10 +2,13 @@ package com.sistema.main;
 
 import com.sistema.cliente.servicio.EstadoLote;
 import com.sistema.cliente.servicio.InfoNodo;
+import com.sistema.cliente.servicio.IRepositorioDatos;
 import com.sistema.cliente.servicio.RequestLote;
 import com.sistema.model.Archivo;
 import com.sistema.model.TipoTransformacion;
+import com.sistema.rest.RepositorioDatosFactory;
 import com.sistema.rest.RepositorioDatosImpl;
+import com.sistema.rest.RepositorioDatosJdbcImpl;
 import com.sistema.rmi.NodoTrabajadorImpl;
 import com.sistema.rmi.ServidorRmiMain;
 import com.sistema.soap.ServicioProcesamientoImagenesImpl;
@@ -18,11 +21,13 @@ import java.net.InetSocketAddress;
 import java.net.URI;
 import java.net.URLDecoder;
 import java.nio.charset.StandardCharsets;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.nio.file.Paths;
 import java.rmi.registry.LocateRegistry;
 import java.rmi.registry.Registry;
+import java.sql.Connection;
+import java.sql.DriverManager;
+import java.sql.PreparedStatement;
+import java.sql.ResultSet;
+import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Base64;
@@ -32,17 +37,13 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CopyOnWriteArrayList;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
 
 public class VisualDemoServerMain {
 
     private static final List<LoteDemo> LOTES = new CopyOnWriteArrayList<>();
-    private static final Map<String, UsuarioDemo> USUARIOS = new LinkedHashMap<>();
-    private static final Path USUARIOS_JSON_PATH = Paths.get("data", "usuarios.json");
-    private static final Pattern USUARIO_JSON_PATTERN = Pattern.compile(
-            "\\{\\s*\"nombres\"\\s*:\\s*\"((?:\\\\.|[^\"\\\\])*)\"\\s*,\\s*\"apellidos\"\\s*:\\s*\"((?:\\\\.|[^\"\\\\])*)\"\\s*,\\s*\"cedula\"\\s*:\\s*\"((?:\\\\.|[^\"\\\\])*)\"\\s*,\\s*\"correo\"\\s*:\\s*\"((?:\\\\.|[^\"\\\\])*)\"\\s*,\\s*\"password\"\\s*:\\s*\"((?:\\\\.|[^\"\\\\])*)\"\\s*\\}"
-    );
+    private static String dbUrl;
+    private static String dbUser;
+    private static String dbPassword;
 
     public static void main(String[] args) {
         try {
@@ -56,7 +57,16 @@ public class VisualDemoServerMain {
             NodoTrabajadorImpl nodoVisual = new NodoTrabajadorImpl("worker-visual");
             registry.rebind(ServidorRmiMain.NOMBRE_BIND, nodoVisual);
 
-            RepositorioDatosImpl repositorio = new RepositorioDatosImpl();
+            IRepositorioDatos repositorio = RepositorioDatosFactory.crearRepositorio();
+            if (!(repositorio instanceof RepositorioDatosJdbcImpl)) {
+                throw new IllegalStateException("Este servidor visual requiere PostgreSQL/JDBC activo (DB_URL, DB_USER, DB_PASSWORD)");
+            }
+
+            dbUrl = leerConfiguracion("DB_URL", "db.url", "");
+            dbUser = leerConfiguracion("DB_USER", "db.user", "imageproc");
+            dbPassword = leerConfiguracion("DB_PASSWORD", "db.password", "imageproc123");
+            validarConexionBaseDatos();
+
             repositorio.registrarNodo(new InfoNodo("worker-visual", "localhost", 1099, true));
 
             ServicioProcesamientoImagenesImpl soap = new ServicioProcesamientoImagenesImpl(
@@ -65,8 +75,6 @@ public class VisualDemoServerMain {
             );
 
             HttpServer httpServer = HttpServer.create(new InetSocketAddress(8080), 0);
-
-            inicializarUsuariosDemo();
 
             httpServer.createContext("/api/health", exchange -> {
                 if (!"GET".equalsIgnoreCase(exchange.getRequestMethod())) {
@@ -82,19 +90,34 @@ public class VisualDemoServerMain {
                     return;
                 }
                 Map<String, String> params = parseQuery(exchange.getRequestURI());
-                String usuario = params.getOrDefault("usuario", "usuario-demo");
-                String password = params.getOrDefault("password", "1234");
+                String usuario = params.getOrDefault("usuario", "").trim();
+                String password = params.getOrDefault("password", "").trim();
 
-                UsuarioDemo usuarioEncontrado;
-                synchronized (USUARIOS) {
-                    usuarioEncontrado = USUARIOS.get(usuario.toLowerCase());
+                if (usuario.isEmpty() || password.isEmpty()) {
+                    sendJson(exchange, 400, "{\"error\":\"usuario y password son obligatorios\"}");
+                    return;
                 }
-                if (usuarioEncontrado == null || !usuarioEncontrado.password.equals(password)) {
+
+                UsuarioDb usuarioEncontrado;
+                try {
+                    usuarioEncontrado = buscarUsuarioValido(usuario, password);
+                } catch (SQLException e) {
+                    sendJson(exchange, 500, "{\"error\":\"No se pudo validar credenciales en base de datos\"}");
+                    return;
+                }
+
+                if (usuarioEncontrado == null) {
                     sendJson(exchange, 401, "{\"error\":\"Credenciales invalidas\"}");
                     return;
                 }
 
-                String token = soap.iniciarSesion(usuario, password);
+                String token = soap.iniciarSesion(usuarioEncontrado.idUsuario, password);
+                try {
+                    guardarSesionActiva(token, usuarioEncontrado.idUsuario);
+                } catch (SQLException e) {
+                    System.err.println("No se pudo persistir sesion en BD: " + e.getMessage());
+                }
+
                 String json = "{\"token\":\"" + jsonEscape(token) + "\",\"usuario\":\"" + jsonEscape(usuarioEncontrado.correo) + "\",\"nombre\":\""
                         + jsonEscape(usuarioEncontrado.nombres + " " + usuarioEncontrado.apellidos) + "\"}";
                 sendJson(exchange, 200, json);
@@ -118,21 +141,15 @@ public class VisualDemoServerMain {
                     return;
                 }
 
-                synchronized (USUARIOS) {
-                    if (USUARIOS.containsKey(correo)) {
-                        sendJson(exchange, 409, "{\"error\":\"El correo ya esta registrado\"}");
-                        return;
+                try {
+                    registrarUsuario(nombres, apellidos, cedula, correo, password);
+                } catch (SQLException e) {
+                    if (esConflictoUnicidad(e)) {
+                        sendJson(exchange, 409, "{\"error\":\"El correo o la cedula ya estan registrados\"}");
+                    } else {
+                        sendJson(exchange, 500, "{\"error\":\"No se pudo guardar el registro en base de datos\"}");
                     }
-
-                    UsuarioDemo nuevoUsuario = new UsuarioDemo(nombres, apellidos, cedula, correo, password);
-                    USUARIOS.put(correo, nuevoUsuario);
-                    try {
-                        guardarUsuariosJson();
-                    } catch (IOException e) {
-                        USUARIOS.remove(correo);
-                        sendJson(exchange, 500, "{\"error\":\"No se pudo guardar el registro provisional\"}");
-                        return;
-                    }
+                    return;
                 }
 
                 String json = "{\"ok\":true,\"correo\":\"" + jsonEscape(correo) + "\",\"mensaje\":\"Registro exitoso\"}";
@@ -363,7 +380,7 @@ public class VisualDemoServerMain {
                 long memoriaUsadaMb = (runtime.totalMemory() - runtime.freeMemory()) / (1024 * 1024);
 
                 Map<String, Object> metricasNodo = nodoVisual.obtenerMetricasConsumo();
-                Map<String, Object> replica = repositorio.obtenerMetricasReplica();
+                Map<String, Object> replica = obtenerMetricasReplica(repositorio);
 
                 String json = "{"
                         + "\"usuario\":\"" + jsonEscape(usuario) + "\","
@@ -398,7 +415,7 @@ public class VisualDemoServerMain {
                     return;
                 }
 
-                Map<String, Object> replica = repositorio.obtenerMetricasReplica();
+                Map<String, Object> replica = obtenerMetricasReplica(repositorio);
                 String json = "{"
                         + "\"nodosPrimario\":" + replica.get("nodosPrimario")
                         + ",\"nodosReplica\":" + replica.get("nodosReplica")
@@ -632,6 +649,27 @@ public class VisualDemoServerMain {
         return sb.toString();
     }
 
+    private static Map<String, Object> obtenerMetricasReplica(IRepositorioDatos repositorio) {
+        if (repositorio instanceof RepositorioDatosImpl) {
+            return ((RepositorioDatosImpl) repositorio).obtenerMetricasReplica();
+        }
+        if (repositorio instanceof RepositorioDatosJdbcImpl) {
+            return ((RepositorioDatosJdbcImpl) repositorio).obtenerMetricasReplica();
+        }
+
+        Map<String, Object> metricas = new LinkedHashMap<>();
+        metricas.put("nodosPrimario", 0);
+        metricas.put("nodosReplica", 0);
+        metricas.put("trabajosPrimario", 0);
+        metricas.put("trabajosReplica", 0);
+        metricas.put("logsPrimario", 0);
+        metricas.put("logsReplica", 0);
+        metricas.put("ultimoSync", "N/A");
+        metricas.put("totalReplicaciones", 0);
+        metricas.put("consistente", false);
+        return metricas;
+    }
+
     private static void sendJson(HttpExchange exchange, int statusCode, String json) throws IOException {
         byte[] bytes = json.getBytes(StandardCharsets.UTF_8);
         exchange.getResponseHeaders().add("Content-Type", "application/json; charset=utf-8");
@@ -669,79 +707,6 @@ public class VisualDemoServerMain {
         return value == null ? "" : value.replace("\\", "\\\\").replace("\"", "\\\"");
     }
 
-    private static void inicializarUsuariosDemo() {
-        synchronized (USUARIOS) {
-            USUARIOS.clear();
-            try {
-                cargarUsuariosJson();
-            } catch (IOException e) {
-                System.err.println("No se pudo leer data/usuarios.json: " + e.getMessage());
-            }
-
-            if (USUARIOS.isEmpty()) {
-                registrarUsuarioInterno(new UsuarioDemo("Admin", "Sistema", "1000000001", "admin@imageproc.com", "admin123"));
-                registrarUsuarioInterno(new UsuarioDemo("Usuario", "Demo", "1000000002", "user@imageproc.com", "user123"));
-                try {
-                    guardarUsuariosJson();
-                } catch (IOException e) {
-                    System.err.println("No se pudo crear data/usuarios.json: " + e.getMessage());
-                }
-            }
-        }
-    }
-
-    private static void registrarUsuarioInterno(UsuarioDemo usuario) {
-        USUARIOS.put(usuario.correo.toLowerCase(), usuario);
-    }
-
-    private static void cargarUsuariosJson() throws IOException {
-        if (!Files.exists(USUARIOS_JSON_PATH)) {
-            return;
-        }
-
-        String contenido = Files.readString(USUARIOS_JSON_PATH, StandardCharsets.UTF_8).trim();
-        if (contenido.isEmpty()) {
-            return;
-        }
-
-        Matcher matcher = USUARIO_JSON_PATTERN.matcher(contenido);
-        while (matcher.find()) {
-            registrarUsuarioInterno(new UsuarioDemo(
-                    jsonUnescape(matcher.group(1)),
-                    jsonUnescape(matcher.group(2)),
-                    jsonUnescape(matcher.group(3)),
-                    jsonUnescape(matcher.group(4)).toLowerCase(),
-                    jsonUnescape(matcher.group(5))
-            ));
-        }
-    }
-
-    private static void guardarUsuariosJson() throws IOException {
-        Path directorio = USUARIOS_JSON_PATH.getParent();
-        if (directorio != null) {
-            Files.createDirectories(directorio);
-        }
-
-        StringBuilder sb = new StringBuilder();
-        sb.append("{\n  \"usuarios\": [\n");
-        int index = 0;
-        for (UsuarioDemo usuario : USUARIOS.values()) {
-            if (index > 0) {
-                sb.append(",\n");
-            }
-            sb.append("    {\"nombres\":\"").append(jsonEscape(usuario.nombres))
-                    .append("\",\"apellidos\":\"").append(jsonEscape(usuario.apellidos))
-                    .append("\",\"cedula\":\"").append(jsonEscape(usuario.cedula))
-                    .append("\",\"correo\":\"").append(jsonEscape(usuario.correo))
-                    .append("\",\"password\":\"").append(jsonEscape(usuario.password))
-                    .append("\"}");
-            index++;
-        }
-        sb.append("\n  ]\n}\n");
-
-        Files.writeString(USUARIOS_JSON_PATH, sb.toString(), StandardCharsets.UTF_8);
-    }
-
     private static String jsonUnescape(String value) {
         if (value == null) {
             return "";
@@ -749,19 +714,93 @@ public class VisualDemoServerMain {
         return value.replace("\\\"", "\"").replace("\\\\", "\\");
     }
 
-    private static class UsuarioDemo {
+    private static void validarConexionBaseDatos() throws SQLException {
+        try (Connection ignored = abrirConexionDb()) {
+            // Conexion valida.
+        }
+    }
+
+    private static Connection abrirConexionDb() throws SQLException {
+        return DriverManager.getConnection(dbUrl, dbUser, dbPassword);
+    }
+
+    private static UsuarioDb buscarUsuarioValido(String usuario, String password) throws SQLException {
+        String sql = "SELECT id_usuario, correo, nombres, apellidos FROM auth.usuarios "
+                + "WHERE activo = TRUE AND password = ? AND (LOWER(correo) = LOWER(?) OR LOWER(id_usuario) = LOWER(?)) LIMIT 1";
+
+        try (Connection con = abrirConexionDb();
+             PreparedStatement ps = con.prepareStatement(sql)) {
+            ps.setString(1, password);
+            ps.setString(2, usuario);
+            ps.setString(3, usuario);
+            try (ResultSet rs = ps.executeQuery()) {
+                if (!rs.next()) {
+                    return null;
+                }
+                return new UsuarioDb(
+                        rs.getString("id_usuario"),
+                        rs.getString("correo"),
+                        rs.getString("nombres"),
+                        rs.getString("apellidos")
+                );
+            }
+        }
+    }
+
+    private static void registrarUsuario(String nombres, String apellidos, String cedula, String correo, String password) throws SQLException {
+        String sql = "INSERT INTO auth.usuarios(id_usuario, nombres, apellidos, cedula, correo, password, activo) VALUES(?, ?, ?, ?, ?, ?, TRUE)";
+        try (Connection con = abrirConexionDb();
+             PreparedStatement ps = con.prepareStatement(sql)) {
+            ps.setString(1, correo);
+            ps.setString(2, nombres);
+            ps.setString(3, apellidos);
+            ps.setString(4, cedula);
+            ps.setString(5, correo);
+            ps.setString(6, password);
+            ps.executeUpdate();
+        }
+    }
+
+    private static void guardarSesionActiva(String token, String idUsuario) throws SQLException {
+        String sql = "INSERT INTO auth.sesiones(token_sesion, id_usuario, activa) VALUES(?, ?, TRUE) "
+                + "ON CONFLICT (token_sesion) DO UPDATE SET id_usuario = EXCLUDED.id_usuario, activa = TRUE, creado_en = NOW()";
+        try (Connection con = abrirConexionDb();
+             PreparedStatement ps = con.prepareStatement(sql)) {
+            ps.setString(1, token);
+            ps.setString(2, idUsuario);
+            ps.executeUpdate();
+        }
+    }
+
+    private static boolean esConflictoUnicidad(SQLException e) {
+        return "23505".equals(e.getSQLState());
+    }
+
+    private static String leerConfiguracion(String envKey, String sysProp, String fallback) {
+        String envValue = System.getenv(envKey);
+        if (envValue != null && !envValue.trim().isEmpty()) {
+            return envValue.trim();
+        }
+
+        String propValue = System.getProperty(sysProp);
+        if (propValue != null && !propValue.trim().isEmpty()) {
+            return propValue.trim();
+        }
+
+        return fallback;
+    }
+
+    private static class UsuarioDb {
+        String idUsuario;
+        String correo;
         String nombres;
         String apellidos;
-        String cedula;
-        String correo;
-        String password;
 
-        UsuarioDemo(String nombres, String apellidos, String cedula, String correo, String password) {
+        UsuarioDb(String idUsuario, String correo, String nombres, String apellidos) {
+            this.idUsuario = idUsuario;
+            this.correo = correo;
             this.nombres = nombres;
             this.apellidos = apellidos;
-            this.cedula = cedula;
-            this.correo = correo;
-            this.password = password;
         }
     }
 

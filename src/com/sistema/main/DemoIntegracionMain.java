@@ -2,10 +2,11 @@ package com.sistema.main;
 
 import com.sistema.cliente.servicio.EstadoLote;
 import com.sistema.cliente.servicio.InfoNodo;
+import com.sistema.cliente.servicio.IRepositorioDatos;
 import com.sistema.cliente.servicio.RequestLote;
 import com.sistema.model.Archivo;
 import com.sistema.model.TipoTransformacion;
-import com.sistema.rest.RepositorioDatosImpl;
+import com.sistema.rest.RepositorioDatosFactory;
 import com.sistema.rmi.NodoTrabajadorImpl;
 import com.sistema.rmi.ServidorRmiMain;
 import com.sistema.soap.ServicioProcesamientoImagenesImpl;
@@ -28,7 +29,7 @@ public class DemoIntegracionMain {
 
             registry.rebind(ServidorRmiMain.NOMBRE_BIND, new NodoTrabajadorImpl("worker-main"));
 
-            RepositorioDatosImpl repositorio = new RepositorioDatosImpl();
+            IRepositorioDatos repositorio = RepositorioDatosFactory.crearRepositorio();
             repositorio.registrarNodo(new InfoNodo("worker-main", "localhost", 1099, true));
 
             ServicioProcesamientoImagenesImpl soap = new ServicioProcesamientoImagenesImpl(

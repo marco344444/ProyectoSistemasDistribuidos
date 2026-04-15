@@ -3,15 +3,69 @@ $ErrorActionPreference = "Stop"
 
 Set-Location $PSScriptRoot
 
-$javaHome = "C:\Program Files\Eclipse Adoptium\jdk-17.0.18.8-hotspot\bin"
-$javaExe = Join-Path $javaHome "java.exe"
-$javacExe = Join-Path $javaHome "javac.exe"
+function Resolve-JavaTool {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$ToolName
+    )
 
-if (!(Test-Path $javaExe) -or !(Test-Path $javacExe)) {
-    Write-Host "No se encontro JDK en: $javaHome" -ForegroundColor Red
-    Write-Host "Instala Temurin 17 o ajusta la ruta javaHome dentro del script." -ForegroundColor Yellow
+    $candidates = @()
+
+    if ($env:JAVA_HOME) {
+        $candidates += (Join-Path $env:JAVA_HOME "bin\$ToolName.exe")
+        $candidates += (Join-Path $env:JAVA_HOME "$ToolName.exe")
+    }
+
+    try {
+        $command = Get-Command $ToolName -ErrorAction Stop
+        if ($command -and $command.Source) {
+            $candidates += $command.Source
+        }
+    } catch {
+    }
+
+    $candidates += @(
+        "C:\Program Files\Eclipse Adoptium\jdk-17.0.18.8-hotspot\bin\$ToolName.exe",
+        "C:\Program Files\Java\jdk-17\bin\$ToolName.exe",
+        "C:\Program Files\Java\jdk-21\bin\$ToolName.exe"
+    )
+
+    foreach ($candidate in ($candidates | Where-Object { $_ } | Select-Object -Unique)) {
+        if (Test-Path $candidate) {
+            return $candidate
+        }
+    }
+
+    return $null
+}
+
+function Get-RuntimeClasspath {
+    $items = @("out")
+
+    if (Test-Path ".\lib") {
+        $jars = Get-ChildItem -Path ".\lib" -Filter *.jar -File -ErrorAction SilentlyContinue
+        foreach ($jar in $jars) {
+            $items += $jar.FullName
+        }
+    }
+
+    return ($items -join [IO.Path]::PathSeparator)
+}
+
+$javaExe = Resolve-JavaTool -ToolName "java"
+$javacExe = Resolve-JavaTool -ToolName "javac"
+
+if (!$javaExe -or !$javacExe) {
+    Write-Host "No se pudo localizar java.exe y javac.exe." -ForegroundColor Red
+    Write-Host "Opciones para corregirlo:" -ForegroundColor Yellow
+    Write-Host "1. Define JAVA_HOME apuntando a tu JDK" -ForegroundColor Yellow
+    Write-Host "2. Agrega java y javac al PATH" -ForegroundColor Yellow
+    Write-Host "3. Ajusta las rutas fallback dentro de run-demo.ps1" -ForegroundColor Yellow
     exit 1
 }
+
+Write-Host "Usando java:  $javaExe" -ForegroundColor DarkGray
+Write-Host "Usando javac: $javacExe" -ForegroundColor DarkGray
 
 if (Test-Path out) {
     Remove-Item -Recurse -Force out
@@ -29,4 +83,5 @@ Write-Host "Compilando proyecto..." -ForegroundColor Cyan
 
 Write-Host "Compilacion OK" -ForegroundColor Green
 Write-Host "Ejecutando demo integrada..." -ForegroundColor Cyan
-& $javaExe -cp out com.sistema.main.DemoIntegracionMain
+$runtimeClasspath = Get-RuntimeClasspath
+& $javaExe -cp $runtimeClasspath com.sistema.main.DemoIntegracionMain

@@ -10,12 +10,81 @@ Aplicacion demo de procesamiento distribuido de imagenes con:
 - Java JDK 17+ (con `java` y `javac` en PATH)
 - Node.js 18+ y npm
 - Windows PowerShell
+- Docker Desktop (opcional, recomendado para PostgreSQL)
 
 ## Estructura
 
 - `src/com/sistema`: backend Java
 - `web-client`: cliente React + Vite
+- `db`: infraestructura de base de datos PostgreSQL (docker + schema)
 - `run-visual-demo.ps1`: compila y levanta backend visual en `http://localhost:8080`
+- `run-all.ps1`: levanta DB + backend + frontend en un comando
+- `stop-all.ps1`: detiene DB + backend + frontend
+
+## Arranque y apagado rapido (todo en uno)
+
+Desde la raiz del repo:
+
+```powershell
+.\run-all.ps1
+```
+
+Para detener todo:
+
+```powershell
+.\stop-all.ps1
+```
+
+Si quieres detener y ademas borrar volumenes de PostgreSQL:
+
+```powershell
+.\stop-all.ps1 -RemoveVolumes
+```
+
+## Base de datos relacional (PostgreSQL)
+
+La base de datos se define siguiendo la infraestructura de capas (autenticacion + aplicacion + BD relacional).
+
+### 1. Levantar PostgreSQL
+
+Desde la raiz del repo:
+
+```powershell
+.\run-db.ps1
+```
+
+Credenciales por defecto:
+
+- Host: `localhost`
+- Puerto: `5433`
+- DB: `imageproc`
+- User: `imageproc`
+- Password: `imageproc123`
+
+El esquema inicial se crea desde `db/init/001_schema.sql` con tablas:
+
+- `auth.usuarios`
+- `auth.sesiones`
+- `procesamiento.nodos`
+- `procesamiento.trabajos`
+- `procesamiento.logs`
+
+`/api/login` y `/api/registro` ya usan PostgreSQL exclusivamente.
+El archivo `data/usuarios.json` queda solo como referencia historica y ya no se escribe desde el backend.
+
+### 2. Habilitar JDBC en backend
+
+1. Descarga el driver PostgreSQL JDBC (`postgresql-*.jar`)
+2. Colocalo en la carpeta `lib/`
+3. Exporta variables antes de ejecutar backend:
+
+```powershell
+$env:DB_URL = "jdbc:postgresql://localhost:5433/imageproc"
+$env:DB_USER = "imageproc"
+$env:DB_PASSWORD = "imageproc123"
+```
+
+Con esas variables, el backend usa repositorio JDBC. Si no estan definidas, sigue usando repositorio en memoria.
 
 ## Como correr el proyecto
 

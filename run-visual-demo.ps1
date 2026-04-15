@@ -39,6 +39,19 @@ function Resolve-JavaTool {
     return $null
 }
 
+function Get-RuntimeClasspath {
+    $items = @("out")
+
+    if (Test-Path ".\lib") {
+        $jars = Get-ChildItem -Path ".\lib" -Filter *.jar -File -ErrorAction SilentlyContinue
+        foreach ($jar in $jars) {
+            $items += $jar.FullName
+        }
+    }
+
+    return ($items -join [IO.Path]::PathSeparator)
+}
+
 $javaExe = Resolve-JavaTool -ToolName "java"
 $javacExe = Resolve-JavaTool -ToolName "javac"
 
@@ -70,4 +83,5 @@ Write-Host "Compilando proyecto..." -ForegroundColor Cyan
 
 Write-Host "Compilacion OK" -ForegroundColor Green
 Write-Host "Levantando servidor visual en puerto 8080..." -ForegroundColor Cyan
-& $javaExe -cp out com.sistema.main.VisualDemoServerMain
+$runtimeClasspath = Get-RuntimeClasspath
+& $javaExe -cp $runtimeClasspath com.sistema.main.VisualDemoServerMain
