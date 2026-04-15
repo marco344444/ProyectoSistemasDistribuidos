@@ -542,6 +542,7 @@
         localStorage.removeItem('usuarioSesion');
         localStorage.removeItem('nombreSesion');
         localStorage.removeItem('idLoteActual');
+        window.dispatchEvent(new CustomEvent('session-changed'));
       };
 
       const getSession = () => {
@@ -662,6 +663,7 @@
           localStorage.setItem('tokenSesion', data.token);
           localStorage.setItem('usuarioSesion', data.usuario || usuario);
           localStorage.setItem('nombreSesion', data.nombre || data.usuario || usuario);
+          window.dispatchEvent(new CustomEvent('session-changed'));
           window.location.href = '02_upload.html';
         } catch (error) {
           showMsg(loginMsg, error.message || 'Error de conexion con el backend visual.', 'error');

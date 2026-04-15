@@ -1,5 +1,9 @@
 {
   "usuarios": [
-    {"nombres":"Sebastian","apellidos":"Pico Afanador","cedula":"1005296655","correo":"picos852@gmail.com","password":"123456"}
+    {"nombres":"Admin","apellidos":"Sistema","cedula":"1000000001","correo":"admin@imageproc.com","password":"admin123"},
+    {"nombres":"Usuario","apellidos":"Demo","cedula":"1000000002","correo":"user@imageproc.com","password":"user123"},
+    {"nombres":"Test","apellidos":"Uno","cedula":"123","correo":"test_verificacion@test.com","password":"123456"},
+    {"nombres":"Sebastian","apellidos":"Pico Afanador","cedula":"1005296655","correo":"picos852@gmail.com","password":"123456"},
+    {"nombres":"Julian","apellidos":"David Torres","cedula":"123456789","correo":"julian@gmail.com","password":"123456"}
   ]
 }
