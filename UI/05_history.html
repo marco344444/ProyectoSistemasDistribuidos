@@ -32,6 +32,9 @@
     .filter-btn { background: var(--bg3); border: 0.5px solid var(--border); border-radius: 9px; padding: 9px 16px; font-size: 14px; color: var(--text2); cursor: pointer; display: flex; align-items: center; gap: 7px; }
     .filter-btn svg { width: 13px; height: 13px; }
     .btn-new { background: var(--accent); border: none; border-radius: 9px; padding: 9px 20px; font-size: 14px; font-weight: 700; color: #fff; cursor: pointer; }
+    .replica-pill { margin-left: 10px; display: inline-flex; align-items: center; gap: 6px; font-size: 12px; padding: 4px 10px; border-radius: 14px; border: 0.5px solid var(--border2); background: var(--bg3); color: var(--text2); }
+    .replica-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--amber); }
+    .replica-pill.ok .replica-dot { background: var(--green); }
 
     @media (max-width: 1024px) {
       .stats-row {
@@ -71,7 +74,7 @@
   </aside>
   <div class="content">
     <div class="topbar">
-      <div><div class="topbar-title">Historial de solicitudes</div><div class="topbar-sub">Todas las solicitudes de procesamiento</div></div>
+      <div><div class="topbar-title">Historial de solicitudes</div><div class="topbar-sub">Todas las solicitudes de procesamiento <span class="replica-pill" id="replicaPill"><span class="replica-dot"></span><span id="replicaText">Replica: verificando...</span></span></div></div>
       <div class="topbar-actions">
         <input class="search" placeholder="Buscar por ID o estado...">
         <button class="filter-btn"><svg viewBox="0 0 13 13" fill="none"><path d="M1 3h11M3 6.5h7M5 10h3" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>Filtrar</button>
@@ -98,6 +101,8 @@
 const chipClass = { COMPLETADO: 'chip-green', EN_PROCESO: 'chip-amber', ERROR: 'chip-red' };
 const tbody = document.getElementById('tbody');
 const usuario = localStorage.getItem('usuarioSesion') || 'usuario-demo';
+const replicaPill = document.getElementById('replicaPill');
+const replicaText = document.getElementById('replicaText');
 
 const statCards = document.querySelectorAll('.stats-row .stat .stat-val');
 
@@ -150,6 +155,30 @@ fetch('http://localhost:8080/api/historial?usuario=' + encodeURIComponent(usuari
   })
   .catch(() => {
     tbody.innerHTML = '<tr><td colspan="8">No se pudo cargar historial. Verifica backend visual.</td></tr>';
+  });
+
+fetch('http://localhost:8080/api/replica')
+  .then((r) => {
+    if (!r.ok) {
+      throw new Error('No disponible');
+    }
+    return r.json();
+  })
+  .then((data) => {
+    const ok = !!data.consistente;
+    if (replicaPill) {
+      replicaPill.classList.toggle('ok', ok);
+    }
+    if (replicaText) {
+      replicaText.textContent = ok
+        ? 'Replica: OK (' + (data.totalReplicaciones || 0) + ' syncs)'
+        : 'Replica: inconsistente';
+    }
+  })
+  .catch(() => {
+    if (replicaText) {
+      replicaText.textContent = 'Replica: no disponible';
+    }
   });
 </script>
 <script src="navigation.js"></script>

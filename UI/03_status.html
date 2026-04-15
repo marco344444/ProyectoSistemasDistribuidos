@@ -28,6 +28,13 @@
     .log-msg.success { color: var(--green); }
     .log-msg.warn { color: var(--amber); }
     .log-msg.accent { color: var(--accent); }
+    .consumo-card { background: var(--bg3); border: 0.5px solid var(--border); border-radius: 10px; padding: 12px; margin-bottom: 14px; }
+    .consumo-title { font-size: 12px; font-weight: 700; color: var(--text); margin-bottom: 8px; }
+    .consumo-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+    .consumo-item { background: var(--bg2); border: 0.5px solid var(--border); border-radius: 8px; padding: 8px; }
+    .consumo-label { font-size: 10px; color: var(--text3); letter-spacing: 0.5px; }
+    .consumo-val { font-size: 13px; color: var(--text); font-weight: 700; margin-top: 2px; }
+    .consumo-btn { margin-top: 10px; width: 100%; background: var(--bg2); border: 0.5px solid var(--border2); border-radius: 8px; padding: 8px; color: var(--accent); font-weight: 600; cursor: pointer; }
 
     @media (max-width: 1100px) {
       .body {
@@ -98,6 +105,18 @@
         </div>
       </div>
       <div class="panel-right">
+        <div class="consumo-card">
+          <div class="consumo-title">Métricas de consumo</div>
+          <div class="consumo-grid">
+            <div class="consumo-item"><div class="consumo-label">CPU NÚCLEOS</div><div class="consumo-val" id="mCpu">-</div></div>
+            <div class="consumo-item"><div class="consumo-label">MEMORIA MB</div><div class="consumo-val" id="mMem">-</div></div>
+            <div class="consumo-item"><div class="consumo-label">CARGA NODO</div><div class="consumo-val" id="mCarga">-</div></div>
+            <div class="consumo-item"><div class="consumo-label">HILOS MÁX.</div><div class="consumo-val" id="mHilos">-</div></div>
+            <div class="consumo-item"><div class="consumo-label">TRABAJOS</div><div class="consumo-val" id="mTrabajos">-</div></div>
+            <div class="consumo-item"><div class="consumo-label">RÉPLICA BD</div><div class="consumo-val" id="mReplica">-</div></div>
+          </div>
+          <button class="consumo-btn" id="refreshMetricsBtn">Solicitar métricas de consumo</button>
+        </div>
         <div class="log-title">Log del sistema</div>
         <div class="log-entries">
           <div class="log-entry info"><div class="log-time">10:32:01.243</div><div class="log-msg accent">Lote #2041 recibido. 5 imágenes encoladas.</div></div>
@@ -116,10 +135,19 @@
 <script>
 (() => {
   const token = localStorage.getItem('tokenSesion');
+  const usuario = localStorage.getItem('usuarioSesion') || 'usuario-demo';
   const idLote = localStorage.getItem('idLoteActual');
   const badge = document.querySelector('.status-badge');
   const title = document.querySelector('.topbar-title');
   const sub = document.querySelector('.topbar-sub');
+  const btnMetrics = document.getElementById('refreshMetricsBtn');
+
+  const mCpu = document.getElementById('mCpu');
+  const mMem = document.getElementById('mMem');
+  const mCarga = document.getElementById('mCarga');
+  const mHilos = document.getElementById('mHilos');
+  const mTrabajos = document.getElementById('mTrabajos');
+  const mReplica = document.getElementById('mReplica');
 
   if (title && idLote) {
     title.textContent = 'Lote ' + idLote;
@@ -169,8 +197,33 @@
     }
   };
 
+  const refreshMetrics = async () => {
+    try {
+      const qs = new URLSearchParams({ usuario }).toString();
+      const response = await fetch('http://localhost:8080/api/metricas?' + qs);
+      if (!response.ok) {
+        throw new Error('Metricas no disponibles');
+      }
+      const data = await response.json();
+      mCpu.textContent = String(data.cpuNuclei ?? '-');
+      mMem.textContent = String(data.memoriaUsadaMb ?? '-') + ' MB';
+      mCarga.textContent = String(data.nodo?.cargaActual ?? '-') + '%';
+      mHilos.textContent = String(data.nodo?.maxHilosParalelos ?? '-');
+      mTrabajos.textContent = String(data.nodo?.trabajosProcesados ?? '-');
+      mReplica.textContent = data.replica?.consistente ? 'OK' : 'DESF';
+    } catch (error) {
+      mReplica.textContent = 'N/A';
+    }
+  };
+
   refresh();
+  refreshMetrics();
   setInterval(refresh, 2000);
+  setInterval(refreshMetrics, 5000);
+
+  if (btnMetrics) {
+    btnMetrics.addEventListener('click', refreshMetrics);
+  }
 })();
 </script>
 <script src="navigation.js"></script>

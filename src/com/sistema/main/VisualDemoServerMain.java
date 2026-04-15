@@ -52,7 +52,8 @@ public class VisualDemoServerMain {
                 registry = LocateRegistry.getRegistry(1099);
             }
 
-            registry.rebind(ServidorRmiMain.NOMBRE_BIND, new NodoTrabajadorImpl("worker-visual"));
+            NodoTrabajadorImpl nodoVisual = new NodoTrabajadorImpl("worker-visual");
+            registry.rebind(ServidorRmiMain.NOMBRE_BIND, nodoVisual);
 
             RepositorioDatosImpl repositorio = new RepositorioDatosImpl();
             repositorio.registrarNodo(new InfoNodo("worker-visual", "localhost", 1099, true));
@@ -263,6 +264,78 @@ public class VisualDemoServerMain {
                 }
                 sb.append("]}");
                 sendJson(exchange, 200, sb.toString());
+            });
+
+            httpServer.createContext("/api/metricas", exchange -> {
+                if (!"GET".equalsIgnoreCase(exchange.getRequestMethod())) {
+                    sendJson(exchange, 405, "{\"error\":\"Method not allowed\"}");
+                    return;
+                }
+
+                Map<String, String> params = parseQuery(exchange.getRequestURI());
+                String usuario = params.getOrDefault("usuario", "usuario-demo");
+
+                int lotesUsuario = 0;
+                int imagenesUsuario = 0;
+                for (LoteDemo lote : LOTES) {
+                    if (usuario.equals(lote.usuario)) {
+                        lotesUsuario++;
+                        imagenesUsuario += lote.cantidad;
+                    }
+                }
+
+                Runtime runtime = Runtime.getRuntime();
+                long memoriaUsadaMb = (runtime.totalMemory() - runtime.freeMemory()) / (1024 * 1024);
+
+                Map<String, Object> metricasNodo = nodoVisual.obtenerMetricasConsumo();
+                Map<String, Object> replica = repositorio.obtenerMetricasReplica();
+
+                String json = "{"
+                        + "\"usuario\":\"" + jsonEscape(usuario) + "\","
+                        + "\"lotesUsuario\":" + lotesUsuario + ","
+                        + "\"imagenesUsuario\":" + imagenesUsuario + ","
+                        + "\"cpuNuclei\":" + runtime.availableProcessors() + ","
+                        + "\"memoriaUsadaMb\":" + memoriaUsadaMb + ","
+                        + "\"nodo\":{"
+                        + "\"id\":\"" + jsonEscape(String.valueOf(metricasNodo.get("idNodo"))) + "\","
+                        + "\"trabajosProcesados\":" + metricasNodo.get("trabajosProcesados") + ","
+                        + "\"imagenesProcesadas\":" + metricasNodo.get("imagenesProcesadas") + ","
+                        + "\"tiempoPromedioMs\":" + metricasNodo.get("tiempoPromedioMs") + ","
+                        + "\"maxHilosParalelos\":" + metricasNodo.get("maxHilosParalelos") + ","
+                        + "\"cargaActual\":" + metricasNodo.get("cargaActual")
+                        + "},"
+                        + "\"replica\":{\"nodosPrimario\":" + replica.get("nodosPrimario")
+                        + ",\"nodosReplica\":" + replica.get("nodosReplica")
+                        + ",\"trabajosPrimario\":" + replica.get("trabajosPrimario")
+                        + ",\"trabajosReplica\":" + replica.get("trabajosReplica")
+                        + ",\"logsPrimario\":" + replica.get("logsPrimario")
+                        + ",\"logsReplica\":" + replica.get("logsReplica")
+                        + ",\"totalReplicaciones\":" + replica.get("totalReplicaciones")
+                        + ",\"consistente\":" + replica.get("consistente")
+                        + ",\"ultimoSync\":\"" + jsonEscape(String.valueOf(replica.get("ultimoSync"))) + "\"}"
+                        + "}";
+                sendJson(exchange, 200, json);
+            });
+
+            httpServer.createContext("/api/replica", exchange -> {
+                if (!"GET".equalsIgnoreCase(exchange.getRequestMethod())) {
+                    sendJson(exchange, 405, "{\"error\":\"Method not allowed\"}");
+                    return;
+                }
+
+                Map<String, Object> replica = repositorio.obtenerMetricasReplica();
+                String json = "{"
+                        + "\"nodosPrimario\":" + replica.get("nodosPrimario")
+                        + ",\"nodosReplica\":" + replica.get("nodosReplica")
+                        + ",\"trabajosPrimario\":" + replica.get("trabajosPrimario")
+                        + ",\"trabajosReplica\":" + replica.get("trabajosReplica")
+                        + ",\"logsPrimario\":" + replica.get("logsPrimario")
+                        + ",\"logsReplica\":" + replica.get("logsReplica")
+                        + ",\"totalReplicaciones\":" + replica.get("totalReplicaciones")
+                        + ",\"consistente\":" + replica.get("consistente")
+                        + ",\"ultimoSync\":\"" + jsonEscape(String.valueOf(replica.get("ultimoSync"))) + "\""
+                        + "}";
+                sendJson(exchange, 200, json);
             });
 
             httpServer.setExecutor(null);
