@@ -97,6 +97,14 @@ export const api = {
     }
     return response.blob();
   },
+  descargarLoteZip: async (token: string, idLote: string): Promise<Blob> => {
+    const search = new URLSearchParams({ token, idLote }).toString();
+    const response = await fetch(`${BASE_URL}/descargarLoteZip?${search}`);
+    if (!response.ok) {
+      throw new Error('No se pudo descargar el lote en ZIP');
+    }
+    return response.blob();
+  },
   getMetricas: (token: string) => getJson<MetricasResponse>('/metricas', { token }),
   getReplica: () => getJson<ReplicaResponse>('/replica'),
 };

@@ -36,6 +36,18 @@ export function useUploadController() {
     }
   };
 
+  const onRemoveFile = (index: number) => {
+    setFiles((prev) => {
+      if (index < 0 || index >= prev.length) {
+        return prev;
+      }
+      const next = prev.filter((_, idx) => idx !== index);
+      const nextCantidad = next.length === 0 ? 1 : next.length;
+      setCantidad(nextCantidad);
+      return next;
+    });
+  };
+
   const onSendBatch = async () => {
     const token = storage.getToken();
     const usuario = storage.getUser() || 'usuario-demo';
@@ -75,6 +87,7 @@ export function useUploadController() {
     loading,
     message,
     onFileChange,
+    onRemoveFile,
     onToggleTransformacion: (key: string) => {
       setTransformacionesSeleccionadas((prev) => {
         if (prev.includes(key)) {

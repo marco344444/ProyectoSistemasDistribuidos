@@ -235,6 +235,18 @@ body {
 .img-header { display: flex; align-items: center; justify-content: space-between; }
 .img-name { display: flex; align-items: center; gap: 9px; font-size: 13px; font-weight: 600; }
 .ext-badge { background: var(--surface); border: 0.5px solid var(--border2); border-radius: 5px; padding: 2px 7px; font-size: 10px; font-weight: 700; color: var(--accent); }
+.btn-remove-file {
+  background: transparent;
+  border: 0.5px solid var(--red-border);
+  color: var(--red);
+  border-radius: 8px;
+  font-size: 11px;
+  padding: 5px 10px;
+  cursor: pointer;
+}
+.btn-remove-file:hover {
+  background: var(--red-bg);
+}
 .summary-card { background: var(--bg); border: 0.5px solid var(--border); border-radius: 12px; padding: 16px; margin-bottom: 14px; }
 .summary-row { display: flex; justify-content: space-between; align-items: center; font-size: 13px; color: var(--text2); padding: 7px 0; border-bottom: 0.5px solid var(--border); }
 .summary-row:last-child { border-bottom: none; }

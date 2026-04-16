@@ -56,11 +56,32 @@ export function useDownloadController() {
     window.URL.revokeObjectURL(url);
   };
 
+  const downloadZip = async () => {
+    if (!token) {
+      throw new Error('No hay sesion activa para descargar');
+    }
+    if (!idLote) {
+      throw new Error('No hay lote seleccionado para descargar');
+    }
+
+    const blob = await api.descargarLoteZip(token, idLote);
+    const url = window.URL.createObjectURL(blob);
+    const anchor = document.createElement('a');
+    anchor.href = url;
+    anchor.download = `${idLote}.zip`;
+    anchor.rel = 'noopener';
+    document.body.appendChild(anchor);
+    anchor.click();
+    document.body.removeChild(anchor);
+    window.URL.revokeObjectURL(url);
+  };
+
   return {
     idLote,
     data,
     error,
     summary,
     downloadFile,
+    downloadZip,
   };
 }

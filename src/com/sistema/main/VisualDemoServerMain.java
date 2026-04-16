@@ -407,6 +407,39 @@ public class VisualDemoServerMain {
                 sendBinary(exchange, 200, "image/png", idResultado, contenido);
             });
 
+            httpServer.createContext("/api/descargarLoteZip", exchange -> {
+                if (!"GET".equalsIgnoreCase(exchange.getRequestMethod())) {
+                    sendJson(exchange, 405, "{\"error\":\"Method not allowed\"}");
+                    return;
+                }
+
+                Map<String, String> params = parseQuery(exchange.getRequestURI());
+                String token = params.getOrDefault("token", "");
+                String idLote = params.getOrDefault("idLote", "");
+
+                if (token.isEmpty() || idLote.isEmpty()) {
+                    sendJson(exchange, 400, "{\"error\":\"token e idLote son obligatorios\"}");
+                    return;
+                }
+
+                String usuarioActual;
+                try {
+                    usuarioActual = soap.obtenerUsuarioSesion(token);
+                } catch (Exception e) {
+                    sendJson(exchange, 401, "{\"error\":\"Sesion invalida\"}");
+                    return;
+                }
+
+                LoteDemo lote = buscarLoteUsuario(idLote, usuarioActual);
+                if (lote == null) {
+                    sendJson(exchange, 404, "{\"error\":\"Lote no encontrado para el usuario autenticado\"}");
+                    return;
+                }
+
+                byte[] contenidoZip = soap.descargarLoteZip(token, idLote);
+                sendBinary(exchange, 200, "application/zip", idLote + ".zip", contenidoZip);
+            });
+
             httpServer.createContext("/api/logout", exchange -> {
                 if (!"GET".equalsIgnoreCase(exchange.getRequestMethod())) {
                     sendJson(exchange, 405, "{\"error\":\"Method not allowed\"}");

@@ -42,13 +42,21 @@ export function UploadView() {
 
             <div className="section-label">IMAGENES CARGADAS ({controller.files.length})</div>
             <div className="image-list">
-              {controller.files.slice(0, 8).map((file) => (
-                <div key={file.name} className="image-card selected">
+              {controller.files.slice(0, 8).map((file, index) => (
+                <div key={`${file.name}-${index}`} className="image-card selected">
                   <div className="img-header">
                     <div className="img-name">
                       <span className="ext-badge">{file.name.split('.').pop()?.toUpperCase() || 'IMG'}</span>
                       {file.name}
                     </div>
+                    <button
+                      type="button"
+                      className="btn-remove-file"
+                      onClick={() => controller.onRemoveFile(index)}
+                      title="Eliminar imagen"
+                    >
+                      Eliminar
+                    </button>
                   </div>
                 </div>
               ))}

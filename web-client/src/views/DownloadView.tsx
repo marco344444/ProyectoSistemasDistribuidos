@@ -6,6 +6,7 @@ import { useDownloadController } from '../controllers/useDownloadController';
 export function DownloadView() {
   const navigate = useNavigate();
   const controller = useDownloadController();
+  const usarZip = controller.summary.total > 2;
 
   return (
     <div className="layout">
@@ -20,6 +21,14 @@ export function DownloadView() {
               <button
                 className="btn-primary"
                 onClick={() => {
+                  if (usarZip) {
+                    controller.downloadZip().catch((error) => {
+                      // eslint-disable-next-line no-alert
+                      window.alert((error as Error).message);
+                    });
+                    return;
+                  }
+
                   (controller.data?.archivos || [])
                     .filter((file) => file.listo)
                     .forEach((file, index) => {
@@ -33,7 +42,7 @@ export function DownloadView() {
                 }}
                 disabled={controller.summary.ready === 0}
               >
-                Descargar todo
+                {usarZip ? 'Descargar todo (.zip)' : 'Descargar todo'}
               </button>
             </>
           }

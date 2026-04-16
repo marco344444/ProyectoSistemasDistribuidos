@@ -10,6 +10,7 @@ import com.sistema.distribuido.nodos.INodoTrabajador;
 import com.sistema.distribuido.nodos.ResultadoProcesamiento;
 import com.sistema.distribuido.nodos.Trabajo;
 
+import java.io.ByteArrayOutputStream;
 import java.nio.charset.StandardCharsets;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
@@ -18,6 +19,8 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import java.util.zip.ZipEntry;
+import java.util.zip.ZipOutputStream;
 
 public class ServicioProcesamientoImagenesImpl implements IServicioProcesamientoImagenes {
 
@@ -118,7 +121,44 @@ public class ServicioProcesamientoImagenesImpl implements IServicioProcesamiento
     @Override
     public byte[] descargarLoteZip(String tokenSesion, String idLote) {
         validarSesion(tokenSesion);
-        return ("ZIP simulado del lote " + idLote).getBytes(StandardCharsets.UTF_8);
+        try {
+            ByteArrayOutputStream baos = new ByteArrayOutputStream();
+            ZipOutputStream zip = new ZipOutputStream(baos, StandardCharsets.UTF_8);
+
+            List<String> resultados;
+            synchronized (resultadosPorId) {
+                resultados = resultadosPorLote.get(idLote) == null
+                        ? new ArrayList<>()
+                        : new ArrayList<>(resultadosPorLote.get(idLote));
+            }
+
+            for (String nombre : resultados) {
+                byte[] contenido;
+                synchronized (resultadosPorId) {
+                    contenido = resultadosPorId.get(nombre);
+                }
+                if (contenido == null) {
+                    continue;
+                }
+                ZipEntry entry = new ZipEntry(nombre);
+                zip.putNextEntry(entry);
+                zip.write(contenido);
+                zip.closeEntry();
+            }
+
+            if (resultados.isEmpty()) {
+                ZipEntry readme = new ZipEntry("README.txt");
+                zip.putNextEntry(readme);
+                zip.write(("El lote " + idLote + " no tiene archivos disponibles").getBytes(StandardCharsets.UTF_8));
+                zip.closeEntry();
+            }
+
+            zip.finish();
+            zip.close();
+            return baos.toByteArray();
+        } catch (Exception e) {
+            return ("No se pudo generar ZIP del lote " + idLote).getBytes(StandardCharsets.UTF_8);
+        }
     }
 
     public List<String> obtenerResultadosLote(String idLote) {
