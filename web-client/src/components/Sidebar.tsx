@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { NavLink, useNavigate } from 'react-router-dom';
+import { api } from '../services/api';
 import { storage } from '../services/storage';
 
 type Props = {
@@ -50,7 +51,16 @@ export function Sidebar({ active }: Props) {
     };
   }, [menuOpen]);
 
-  const onLogout = () => {
+  const onLogout = async () => {
+    const token = storage.getToken();
+    if (token) {
+      try {
+        await api.logout(token);
+      } catch {
+        // Continue with local cleanup even if backend logout fails.
+      }
+    }
+
     storage.clearToken();
     storage.clearUser();
     storage.clearBatchId();

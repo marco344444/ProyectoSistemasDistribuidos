@@ -4,16 +4,22 @@ import { api } from '../services/api';
 import { storage } from '../services/storage';
 
 export function useHistoryController() {
-  const usuario = storage.getUser() || 'usuario-demo';
+  const token = storage.getToken();
 
   const [historial, setHistorial] = useState<HistorialResponse | null>(null);
   const [replica, setReplica] = useState<ReplicaResponse | null>(null);
   const [error, setError] = useState('');
 
   useEffect(() => {
-    api.getHistorial(usuario)
+    if (!token) {
+      setError('No hay sesion activa.');
+      return;
+    }
+
+    api.getHistorial(token)
       .then((response) => {
         setHistorial(response);
+        setError('');
       })
       .catch((e) => {
         setError((e as Error).message);
@@ -26,7 +32,7 @@ export function useHistoryController() {
       .catch(() => {
         // replica is informative only
       });
-  }, [usuario]);
+  }, [token]);
 
   return {
     historial,

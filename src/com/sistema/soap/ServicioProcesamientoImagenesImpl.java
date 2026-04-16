@@ -142,6 +142,15 @@ public class ServicioProcesamientoImagenesImpl implements IServicioProcesamiento
         }
     }
 
+    public String obtenerUsuarioSesion(String tokenSesion) {
+        validarSesion(tokenSesion);
+        return sesiones.get(tokenSesion);
+    }
+
+    public void cerrarSesion(String tokenSesion) {
+        sesiones.remove(tokenSesion);
+    }
+
     private void validarSesion(String tokenSesion) {
         if (!sesiones.containsKey(tokenSesion)) {
             throw new IllegalArgumentException("Sesion invalida");

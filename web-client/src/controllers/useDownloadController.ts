@@ -14,7 +14,12 @@ export function useDownloadController() {
       return;
     }
 
-    api.getDescargas(idLote)
+    if (!token) {
+      setError('No hay sesion activa para consultar descargas');
+      return;
+    }
+
+    api.getDescargas(token, idLote)
       .then((response) => {
         setData(response);
         setError('');
@@ -22,7 +27,7 @@ export function useDownloadController() {
       .catch((e) => {
         setError((e as Error).message);
       });
-  }, [idLote]);
+  }, [idLote, token]);
 
   const summary = useMemo(() => {
     const archivos = data?.archivos || [];

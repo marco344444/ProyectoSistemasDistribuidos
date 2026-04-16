@@ -50,6 +50,7 @@ export const api = {
     correo: string;
     password: string;
   }) => getJson<RegisterResponse>('/registro', payload),
+  logout: (token: string) => getJson<{ ok: boolean; mensaje: string }>('/logout', { token }),
   sendBatch: (token: string, usuario: string, cantidad: number) =>
     getJson<SendBatchResponse>('/enviarLote', {
       token,
@@ -86,8 +87,8 @@ export const api = {
   },
   getEstado: (token: string, idLote: string) =>
     getJson<EstadoResponse>('/estado', { token, idLote }),
-  getHistorial: (usuario: string) => getJson<HistorialResponse>('/historial', { usuario }),
-  getDescargas: (idLote: string) => getJson<DescargasResponse>('/descargas', { idLote }),
+  getHistorial: (token: string) => getJson<HistorialResponse>('/historial', { token }),
+  getDescargas: (token: string, idLote: string) => getJson<DescargasResponse>('/descargas', { token, idLote }),
   descargarImagen: async (token: string, idResultado: string): Promise<Blob> => {
     const search = new URLSearchParams({ token, idResultado }).toString();
     const response = await fetch(`${BASE_URL}/descargarImagen?${search}`);
@@ -96,6 +97,6 @@ export const api = {
     }
     return response.blob();
   },
-  getMetricas: (usuario: string) => getJson<MetricasResponse>('/metricas', { usuario }),
+  getMetricas: (token: string) => getJson<MetricasResponse>('/metricas', { token }),
   getReplica: () => getJson<ReplicaResponse>('/replica'),
 };

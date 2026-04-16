@@ -164,7 +164,13 @@ public class VisualDemoServerMain {
 
                 Map<String, String> params = parseQuery(exchange.getRequestURI());
                 String token = params.getOrDefault("token", "");
-                String usuario = params.getOrDefault("usuario", "usuario-demo");
+                String usuario;
+                try {
+                    usuario = soap.obtenerUsuarioSesion(token);
+                } catch (Exception e) {
+                    sendJson(exchange, 401, "{\"error\":\"Sesion invalida\"}");
+                    return;
+                }
                 int cantidad = parseInt(params.get("cantidad"), 3);
                 cantidad = Math.max(1, Math.min(400, cantidad));
 
@@ -207,11 +213,17 @@ public class VisualDemoServerMain {
                 try {
                     String body = leerBody(exchange);
                     String token = extraerCampoJson(body, "token");
-                    String usuario = extraerCampoJson(body, "usuario");
+                    String usuario;
+                    try {
+                        usuario = soap.obtenerUsuarioSesion(token);
+                    } catch (Exception e) {
+                        sendJson(exchange, 401, "{\"error\":\"Sesion invalida\"}");
+                        return;
+                    }
                     List<Archivo> archivos = extraerArchivosDesdeJson(body);
 
-                    if (token.isEmpty() || usuario.isEmpty() || archivos.isEmpty()) {
-                        sendJson(exchange, 400, "{\"error\":\"token, usuario y archivos son obligatorios\"}");
+                    if (token.isEmpty() || archivos.isEmpty()) {
+                        sendJson(exchange, 400, "{\"error\":\"token y archivos son obligatorios\"}");
                         return;
                     }
 
@@ -248,9 +260,17 @@ public class VisualDemoServerMain {
                 Map<String, String> params = parseQuery(exchange.getRequestURI());
                 String token = params.getOrDefault("token", "");
                 String idLote = params.getOrDefault("idLote", "");
+                String usuarioActual;
+
+                try {
+                    usuarioActual = soap.obtenerUsuarioSesion(token);
+                } catch (Exception e) {
+                    sendJson(exchange, 401, "{\"error\":\"Sesion invalida\"}");
+                    return;
+                }
 
                 EstadoLote estado = soap.consultarEstadoLote(token, idLote);
-                LoteDemo lote = buscarLote(idLote);
+                LoteDemo lote = buscarLoteUsuario(idLote, usuarioActual);
                 String json = "{\"idLote\":\"" + jsonEscape(estado.getIdLote()) + "\",\"estado\":\"" + jsonEscape(estado.getEstado())
                     + "\",\"total\":" + estado.getTotalImagenes() + ",\"procesadas\":" + estado.getProcesadas()
                     + ",\"duracionMs\":" + (lote == null ? 0 : lote.duracionMs)
@@ -267,7 +287,14 @@ public class VisualDemoServerMain {
                 }
 
                 Map<String, String> params = parseQuery(exchange.getRequestURI());
-                String usuario = params.getOrDefault("usuario", "usuario-demo");
+                String token = params.getOrDefault("token", "");
+                String usuario;
+                try {
+                    usuario = soap.obtenerUsuarioSesion(token);
+                } catch (Exception e) {
+                    sendJson(exchange, 401, "{\"error\":\"Sesion invalida\"}");
+                    return;
+                }
                 List<LoteDemo> filtrados = new ArrayList<>();
                 for (LoteDemo lote : LOTES) {
                     if (usuario.equals(lote.usuario)) {
@@ -315,10 +342,19 @@ public class VisualDemoServerMain {
                 }
 
                 Map<String, String> params = parseQuery(exchange.getRequestURI());
+                String token = params.getOrDefault("token", "");
                 String idLote = params.getOrDefault("idLote", "");
-                LoteDemo lote = buscarLote(idLote);
+                String usuarioActual;
+                try {
+                    usuarioActual = soap.obtenerUsuarioSesion(token);
+                } catch (Exception e) {
+                    sendJson(exchange, 401, "{\"error\":\"Sesion invalida\"}");
+                    return;
+                }
+
+                LoteDemo lote = buscarLoteUsuario(idLote, usuarioActual);
                 if (lote == null) {
-                    sendJson(exchange, 404, "{\"error\":\"Lote no encontrado\"}");
+                    sendJson(exchange, 404, "{\"error\":\"Lote no encontrado para el usuario autenticado\"}");
                     return;
                 }
 
@@ -354,8 +390,43 @@ public class VisualDemoServerMain {
                     return;
                 }
 
+                String usuarioActual;
+                try {
+                    usuarioActual = soap.obtenerUsuarioSesion(token);
+                } catch (Exception e) {
+                    sendJson(exchange, 401, "{\"error\":\"Sesion invalida\"}");
+                    return;
+                }
+
+                if (!usuarioPuedeDescargarResultado(usuarioActual, idResultado)) {
+                    sendJson(exchange, 403, "{\"error\":\"No autorizado para descargar este resultado\"}");
+                    return;
+                }
+
                 byte[] contenido = soap.descargarImagen(token, idResultado);
                 sendBinary(exchange, 200, "image/png", idResultado, contenido);
+            });
+
+            httpServer.createContext("/api/logout", exchange -> {
+                if (!"GET".equalsIgnoreCase(exchange.getRequestMethod())) {
+                    sendJson(exchange, 405, "{\"error\":\"Method not allowed\"}");
+                    return;
+                }
+
+                Map<String, String> params = parseQuery(exchange.getRequestURI());
+                String token = params.getOrDefault("token", "");
+                if (token.isEmpty()) {
+                    sendJson(exchange, 400, "{\"error\":\"token es obligatorio\"}");
+                    return;
+                }
+
+                try {
+                    marcarSesionInactiva(token);
+                } catch (SQLException e) {
+                    System.err.println("No se pudo actualizar auth.sesiones en logout: " + e.getMessage());
+                }
+                soap.cerrarSesion(token);
+                sendJson(exchange, 200, "{\"ok\":true,\"mensaje\":\"Sesion cerrada\"}");
             });
 
             httpServer.createContext("/api/metricas", exchange -> {
@@ -365,7 +436,14 @@ public class VisualDemoServerMain {
                 }
 
                 Map<String, String> params = parseQuery(exchange.getRequestURI());
-                String usuario = params.getOrDefault("usuario", "usuario-demo");
+                String token = params.getOrDefault("token", "");
+                String usuario;
+                try {
+                    usuario = soap.obtenerUsuarioSesion(token);
+                } catch (Exception e) {
+                    sendJson(exchange, 401, "{\"error\":\"Sesion invalida\"}");
+                    return;
+                }
 
                 int lotesUsuario = 0;
                 int imagenesUsuario = 0;
@@ -460,6 +538,29 @@ public class VisualDemoServerMain {
             }
         }
         return null;
+    }
+
+    private static LoteDemo buscarLoteUsuario(String idLote, String usuario) {
+        for (LoteDemo lote : LOTES) {
+            if (lote.idLote.equals(idLote) && usuario.equals(lote.usuario)) {
+                return lote;
+            }
+        }
+        return null;
+    }
+
+    private static boolean usuarioPuedeDescargarResultado(String usuario, String idResultado) {
+        for (LoteDemo lote : LOTES) {
+            if (!usuario.equals(lote.usuario)) {
+                continue;
+            }
+            for (String nombreArchivo : lote.archivos) {
+                if (idResultado.equals(nombreArchivo)) {
+                    return true;
+                }
+            }
+        }
+        return false;
     }
 
     private static int parseInt(String value, int fallback) {
@@ -768,6 +869,15 @@ public class VisualDemoServerMain {
              PreparedStatement ps = con.prepareStatement(sql)) {
             ps.setString(1, token);
             ps.setString(2, idUsuario);
+            ps.executeUpdate();
+        }
+    }
+
+    private static void marcarSesionInactiva(String token) throws SQLException {
+        String sql = "UPDATE auth.sesiones SET activa = FALSE WHERE token_sesion = ?";
+        try (Connection con = abrirConexionDb();
+             PreparedStatement ps = con.prepareStatement(sql)) {
+            ps.setString(1, token);
             ps.executeUpdate();
         }
     }

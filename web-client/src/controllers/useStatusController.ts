@@ -5,7 +5,6 @@ import { storage } from '../services/storage';
 
 export function useStatusController() {
   const token = storage.getToken();
-  const usuario = storage.getUser() || 'usuario-demo';
   const idLote = storage.getBatchId();
 
   const [estado, setEstado] = useState<EstadoResponse | null>(null);
@@ -27,13 +26,17 @@ export function useStatusController() {
   }, [idLote, token]);
 
   const refreshMetricas = useCallback(async () => {
+    if (!token) {
+      return;
+    }
+
     try {
-      const data = await api.getMetricas(usuario);
+      const data = await api.getMetricas(token);
       setMetricas(data);
     } catch {
       // Keep previous metrics visible if backend fails temporarily.
     }
-  }, [usuario]);
+  }, [token]);
 
   useEffect(() => {
     refreshEstado();
