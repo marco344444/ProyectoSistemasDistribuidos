@@ -1,8 +1,8 @@
 package com.sistema.main;
 
 import com.sistema.cliente.servicio.EstadoLote;
-import com.sistema.cliente.servicio.InfoNodo;
 import com.sistema.cliente.servicio.IRepositorioDatos;
+import com.sistema.cliente.servicio.InfoNodo;
 import com.sistema.cliente.servicio.RequestLote;
 import com.sistema.model.Archivo;
 import com.sistema.model.TipoTransformacion;
@@ -14,7 +14,6 @@ import com.sistema.rmi.ServidorRmiMain;
 import com.sistema.soap.ServicioProcesamientoImagenesImpl;
 import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpServer;
-
 import java.io.IOException;
 import java.io.OutputStream;
 import java.net.InetSocketAddress;
@@ -23,6 +22,9 @@ import java.net.URLDecoder;
 import java.nio.charset.StandardCharsets;
 import java.rmi.registry.LocateRegistry;
 import java.rmi.registry.Registry;
+import java.security.GeneralSecurityException;
+import java.security.MessageDigest;
+import java.security.SecureRandom;
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.PreparedStatement;
@@ -37,10 +39,20 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CopyOnWriteArrayList;
+import javax.crypto.SecretKeyFactory;
+import javax.crypto.spec.PBEKeySpec;
 
 public class VisualDemoServerMain {
 
     private static final List<LoteDemo> LOTES = new CopyOnWriteArrayList<>();
+    private static final int PASSWORD_SALT_BYTES = 16;
+    private static final int PASSWORD_KEY_LENGTH_BITS = 256;
+    private static final int PASSWORD_ITERATIONS = 120000;
+    private static final String PASSWORD_ALGO = "PBKDF2WithHmacSHA256";
+    private static final int MAX_LOTE_IMAGENES = 2000;
+    private static final long MAX_LOTE_BYTES = 1536L * 1024L * 1024L;
+    private static final long MB_DIVISOR = 1024L * 1024L;
+    private static final SecureRandom SECURE_RANDOM = new SecureRandom();
     private static String dbUrl;
     private static String dbUser;
     private static String dbPassword;
@@ -85,11 +97,22 @@ public class VisualDemoServerMain {
             });
 
             httpServer.createContext("/api/login", exchange -> {
-                if (!"GET".equalsIgnoreCase(exchange.getRequestMethod())) {
+                if ("OPTIONS".equalsIgnoreCase(exchange.getRequestMethod())) {
+                    sendOptions(exchange, "POST, OPTIONS");
+                    return;
+                }
+
+                String method = exchange.getRequestMethod();
+                if (!"POST".equalsIgnoreCase(method)) {
                     sendJson(exchange, 405, "{\"error\":\"Method not allowed\"}");
                     return;
                 }
-                Map<String, String> params = parseQuery(exchange.getRequestURI());
+
+                String body = leerBody(exchange);
+                Map<String, String> params = new LinkedHashMap<>();
+                params.put("usuario", extraerCampoJson(body, "usuario"));
+                params.put("password", extraerCampoJson(body, "password"));
+
                 String usuario = params.getOrDefault("usuario", "").trim();
                 String password = params.getOrDefault("password", "").trim();
 
@@ -124,12 +147,25 @@ public class VisualDemoServerMain {
             });
 
             httpServer.createContext("/api/registro", exchange -> {
-                if (!"GET".equalsIgnoreCase(exchange.getRequestMethod())) {
+                if ("OPTIONS".equalsIgnoreCase(exchange.getRequestMethod())) {
+                    sendOptions(exchange, "POST, OPTIONS");
+                    return;
+                }
+
+                String method = exchange.getRequestMethod();
+                if (!"POST".equalsIgnoreCase(method)) {
                     sendJson(exchange, 405, "{\"error\":\"Method not allowed\"}");
                     return;
                 }
 
-                Map<String, String> params = parseQuery(exchange.getRequestURI());
+                String body = leerBody(exchange);
+                Map<String, String> params = new LinkedHashMap<>();
+                params.put("nombres", extraerCampoJson(body, "nombres"));
+                params.put("apellidos", extraerCampoJson(body, "apellidos"));
+                params.put("cedula", extraerCampoJson(body, "cedula"));
+                params.put("correo", extraerCampoJson(body, "correo"));
+                params.put("password", extraerCampoJson(body, "password"));
+
                 String nombres = params.getOrDefault("nombres", "").trim();
                 String apellidos = params.getOrDefault("apellidos", "").trim();
                 String cedula = params.getOrDefault("cedula", "").trim();
@@ -172,7 +208,7 @@ public class VisualDemoServerMain {
                     return;
                 }
                 int cantidad = parseInt(params.get("cantidad"), 3);
-                cantidad = Math.max(1, Math.min(400, cantidad));
+                cantidad = Math.max(1, Math.min(MAX_LOTE_IMAGENES, cantidad));
 
                 RequestLote lote = construirLote(usuario, cantidad);
                 String idLote = soap.enviarLoteProcesamiento(token, lote);
@@ -191,7 +227,7 @@ public class VisualDemoServerMain {
                 if (loteDemo.archivos.isEmpty()) {
                     loteDemo.archivos = new ArrayList<>();
                     for (int i = 0; i < cantidad; i++) {
-                        loteDemo.archivos.add(idLote + "_img_" + i + "_procesada.png");
+                        loteDemo.archivos.add("imagen_edited_" + i + ".png");
                     }
                 }
                 LOTES.add(loteDemo);
@@ -224,6 +260,14 @@ public class VisualDemoServerMain {
 
                     if (token.isEmpty() || archivos.isEmpty()) {
                         sendJson(exchange, 400, "{\"error\":\"token y archivos son obligatorios\"}");
+                        return;
+                    }
+
+                    long totalBytesLote = calcularTamanoTotalBytes(archivos);
+                    if (totalBytesLote > MAX_LOTE_BYTES) {
+                        String error = "{\"error\":\"El tamano total del lote excede 1.5 GB (actual: "
+                                + bytesAMb(totalBytesLote) + " MB)\"}";
+                        sendJson(exchange, 413, error);
                         return;
                     }
 
@@ -271,8 +315,21 @@ public class VisualDemoServerMain {
 
                 EstadoLote estado = soap.consultarEstadoLote(token, idLote);
                 LoteDemo lote = buscarLoteUsuario(idLote, usuarioActual);
+                int totalImagenes = estado.getTotalImagenes();
+                int procesadas = estado.getProcesadas();
+
+                if (lote != null && totalImagenes <= 0) {
+                    totalImagenes = Math.max(lote.cantidad, lote.archivos == null ? 0 : lote.archivos.size());
+                }
+                if ("COMPLETADO".equalsIgnoreCase(estado.getEstado()) && totalImagenes > 0 && procesadas <= 0) {
+                    procesadas = totalImagenes;
+                }
+                if (procesadas > totalImagenes && totalImagenes > 0) {
+                    procesadas = totalImagenes;
+                }
+
                 String json = "{\"idLote\":\"" + jsonEscape(estado.getIdLote()) + "\",\"estado\":\"" + jsonEscape(estado.getEstado())
-                    + "\",\"total\":" + estado.getTotalImagenes() + ",\"procesadas\":" + estado.getProcesadas()
+                    + "\",\"total\":" + totalImagenes + ",\"procesadas\":" + procesadas
                     + ",\"duracionMs\":" + (lote == null ? 0 : lote.duracionMs)
                     + ",\"logs\":" + toJsonArray(lote == null ? Collections.emptyList() : lote.logs)
                     + ",\"transformaciones\":" + toJsonArray(lote == null ? Collections.emptyList() : lote.transformaciones)
@@ -770,6 +827,27 @@ public class VisualDemoServerMain {
         return nombres;
     }
 
+    private static long calcularTamanoTotalBytes(List<Archivo> archivos) {
+        long total = 0L;
+        if (archivos == null) {
+            return total;
+        }
+
+        for (Archivo archivo : archivos) {
+            if (archivo == null || archivo.getContenido() == null) {
+                continue;
+            }
+            total += archivo.getContenido().length;
+        }
+        return total;
+    }
+
+    private static String bytesAMb(long bytes) {
+        long mbEnteros = bytes / MB_DIVISOR;
+        long decima = ((bytes % MB_DIVISOR) * 10L) / MB_DIVISOR;
+        return mbEnteros + "." + decima;
+    }
+
     private static String toJsonArray(List<String> values) {
         StringBuilder sb = new StringBuilder();
         sb.append('[');
@@ -859,18 +937,27 @@ public class VisualDemoServerMain {
     }
 
     private static UsuarioDb buscarUsuarioValido(String usuario, String password) throws SQLException {
-        String sql = "SELECT id_usuario, correo, nombres, apellidos FROM auth.usuarios "
-                + "WHERE activo = TRUE AND password = ? AND (LOWER(correo) = LOWER(?) OR LOWER(id_usuario) = LOWER(?)) LIMIT 1";
+        String sql = "SELECT id_usuario, correo, nombres, apellidos, password FROM auth.usuarios "
+                + "WHERE activo = TRUE AND (LOWER(correo) = LOWER(?) OR LOWER(id_usuario) = LOWER(?)) LIMIT 1";
 
         try (Connection con = abrirConexionDb();
              PreparedStatement ps = con.prepareStatement(sql)) {
-            ps.setString(1, password);
+            ps.setString(1, usuario);
             ps.setString(2, usuario);
-            ps.setString(3, usuario);
             try (ResultSet rs = ps.executeQuery()) {
                 if (!rs.next()) {
                     return null;
                 }
+
+                String passwordGuardado = rs.getString("password");
+                if (!passwordCoincide(password, passwordGuardado)) {
+                    return null;
+                }
+
+                if (esPasswordLegado(passwordGuardado)) {
+                    actualizarPasswordUsuario(con, rs.getString("id_usuario"), hashPassword(password));
+                }
+
                 return new UsuarioDb(
                         rs.getString("id_usuario"),
                         rs.getString("correo"),
@@ -890,8 +977,77 @@ public class VisualDemoServerMain {
             ps.setString(3, apellidos);
             ps.setString(4, cedula);
             ps.setString(5, correo);
-            ps.setString(6, password);
+            ps.setString(6, hashPassword(password));
             ps.executeUpdate();
+        }
+    }
+
+    private static void actualizarPasswordUsuario(Connection con, String idUsuario, String passwordHash) throws SQLException {
+        String sql = "UPDATE auth.usuarios SET password = ? WHERE id_usuario = ?";
+        try (PreparedStatement ps = con.prepareStatement(sql)) {
+            ps.setString(1, passwordHash);
+            ps.setString(2, idUsuario);
+            ps.executeUpdate();
+        }
+    }
+
+    private static boolean passwordCoincide(String passwordIngresado, String passwordGuardado) {
+        if (passwordGuardado == null || passwordGuardado.isEmpty()) {
+            return false;
+        }
+
+        if (esPasswordLegado(passwordGuardado)) {
+            return MessageDigest.isEqual(
+                    passwordGuardado.getBytes(StandardCharsets.UTF_8),
+                    passwordIngresado.getBytes(StandardCharsets.UTF_8)
+            );
+        }
+
+        String[] partes = passwordGuardado.split("\\$", 4);
+        if (partes.length != 4 || !"pbkdf2".equals(partes[0])) {
+            return false;
+        }
+
+        try {
+            int iteraciones = Integer.parseInt(partes[1]);
+            byte[] salt = Base64.getDecoder().decode(partes[2]);
+            byte[] esperado = Base64.getDecoder().decode(partes[3]);
+            byte[] calculado = derivarPassword(passwordIngresado.toCharArray(), salt, iteraciones, esperado.length * 8);
+            return MessageDigest.isEqual(esperado, calculado);
+        } catch (Exception e) {
+            return false;
+        }
+    }
+
+    private static boolean esPasswordLegado(String passwordGuardado) {
+        return !passwordGuardado.startsWith("pbkdf2$");
+    }
+
+    private static String hashPassword(String passwordPlano) {
+        byte[] salt = new byte[PASSWORD_SALT_BYTES];
+        SECURE_RANDOM.nextBytes(salt);
+        byte[] hash = derivarPassword(
+                passwordPlano.toCharArray(),
+                salt,
+                PASSWORD_ITERATIONS,
+                PASSWORD_KEY_LENGTH_BITS
+        );
+        return "pbkdf2$" + PASSWORD_ITERATIONS + "$"
+                + Base64.getEncoder().encodeToString(salt) + "$"
+                + Base64.getEncoder().encodeToString(hash);
+    }
+
+    private static byte[] derivarPassword(char[] password, byte[] salt, int iteraciones, int keyLengthBits) {
+        try {
+            PBEKeySpec spec = new PBEKeySpec(password, salt, iteraciones, keyLengthBits);
+            try {
+                SecretKeyFactory skf = SecretKeyFactory.getInstance(PASSWORD_ALGO);
+                return skf.generateSecret(spec).getEncoded();
+            } finally {
+                spec.clearPassword();
+            }
+        } catch (GeneralSecurityException e) {
+            throw new IllegalStateException("No se pudo derivar el hash de password", e);
         }
     }
 

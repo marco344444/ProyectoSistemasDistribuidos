@@ -5,11 +5,14 @@ import { useHistoryController } from '../controllers/useHistoryController';
 import { storage } from '../services/storage';
 
 function formatDate(value: string): string {
-  const date = new Date(Number(value));
+  const numeric = Number(value);
+  const date = Number.isNaN(numeric) ? new Date(value) : new Date(numeric);
   if (Number.isNaN(date.getTime())) {
     return '-';
   }
-  return date.toLocaleString('es-CO');
+  const fecha = date.toLocaleDateString('es-CO');
+  const hora = date.toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+  return `${fecha} ${hora}`;
 }
 
 export function HistoryView() {

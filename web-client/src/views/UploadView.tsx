@@ -35,7 +35,7 @@ export function UploadView() {
             <label className="dropzone" htmlFor="fileInput">
               <div className="dz-icon">+</div>
               <div className="dz-title">Arrastra tus imagenes aqui</div>
-              <div className="dz-sub">JPG, PNG, TIF - Maximo 400 por lote</div>
+              <div className="dz-sub">JPG, PNG, TIF - Maximo 2000 por lote</div>
               <div className="btn-upload">Seleccionar archivos</div>
             </label>
             <input id="fileInput" type="file" accept=".jpg,.jpeg,.png,.tif,.tiff" multiple style={{ display: 'none' }} onChange={controller.onFileChange} />
@@ -87,8 +87,9 @@ export function UploadView() {
             <div className="summary-card">
               <div className="summary-row"><span>Imagenes</span><span className="summary-val">{controller.files.length || controller.cantidad} archivos</span></div>
               <div className="summary-row"><span>Cantidad a enviar</span><span className="summary-val accent">{controller.cantidad}</span></div>
+              <div className="summary-row"><span>Tamano total</span><span className="summary-val">{controller.totalSizeMb} MB</span></div>
               <div className="summary-row"><span>Transformaciones</span><span className="summary-val">{controller.transformacionesSeleccionadas.length}</span></div>
-              <div className="summary-row"><span>Tiempo estimado</span><span className="summary-val">~45 seg</span></div>
+              <div className="summary-row"><span>Tiempo estimado</span><span className="summary-val">{controller.estimatedTime}</span></div>
             </div>
           </div>
         </div>

@@ -6,6 +6,7 @@ import com.sistema.cliente.servicio.IServicioProcesamientoImagenes;
 import com.sistema.cliente.servicio.RegistroLog;
 import com.sistema.cliente.servicio.RegistroTrabajo;
 import com.sistema.cliente.servicio.RequestLote;
+import com.sistema.rest.RepositorioDatosJdbcImpl;
 import com.sistema.distribuido.nodos.INodoTrabajador;
 import com.sistema.distribuido.nodos.ResultadoProcesamiento;
 import com.sistema.distribuido.nodos.Trabajo;
@@ -31,6 +32,9 @@ public class ServicioProcesamientoImagenesImpl implements IServicioProcesamiento
     private final Map<String, List<String>> resultadosPorLote = new LinkedHashMap<>();
     private final Map<String, List<String>> logsPorLote = new LinkedHashMap<>();
     private final Map<String, Long> duracionPorLoteMs = new LinkedHashMap<>();
+    private final Map<String, Integer> totalPorLote = new LinkedHashMap<>();
+    private final Map<String, Integer> procesadasPorLote = new LinkedHashMap<>();
+    private final Map<String, LocalDateTime> fechaRecepcionPorLote = new LinkedHashMap<>();
 
     public ServicioProcesamientoImagenesImpl(IRepositorioDatos repositorio, INodoTrabajador nodoTrabajador) {
         this.repositorio = repositorio;
@@ -50,9 +54,17 @@ public class ServicioProcesamientoImagenesImpl implements IServicioProcesamiento
         validarSesion(tokenSesion);
         String idTrabajo = "JOB-" + UUID.randomUUID();
         long inicio = System.currentTimeMillis();
+        LocalDateTime fechaRecepcion = LocalDateTime.now();
+        int totalImagenes = (lote.getImagenes() == null) ? 0 : lote.getImagenes().size();
 
         System.out.println("[SOAP] SOAP recibe solicitud para lote del usuario " + lote.getIdUsuario());
-        repositorio.crearTrabajo(new RegistroTrabajo(idTrabajo, lote.getIdUsuario(), "RECIBIDO", LocalDateTime.now().toString()));
+        repositorio.crearTrabajo(new RegistroTrabajo(idTrabajo, lote.getIdUsuario(), "RECIBIDO", fechaRecepcion.toString()));
+
+        synchronized (resultadosPorId) {
+            totalPorLote.put(idTrabajo, totalImagenes);
+            procesadasPorLote.put(idTrabajo, 0);
+            fechaRecepcionPorLote.put(idTrabajo, fechaRecepcion);
+        }
 
         Trabajo trabajo = new Trabajo();
         trabajo.setIdTrabajo(idTrabajo);
@@ -64,6 +76,7 @@ public class ServicioProcesamientoImagenesImpl implements IServicioProcesamiento
             repositorio.actualizarEstadoTrabajo(idTrabajo, "EN_PROCESO");
             System.out.println("[Backend] Backend envía trabajo a nodo");
             ResultadoProcesamiento resultado = nodoTrabajador.procesarTrabajo(trabajo);
+            LocalDateTime fechaConversion = LocalDateTime.now();
 
             if (resultado.isExito()) {
                 repositorio.actualizarEstadoTrabajo(idTrabajo, "COMPLETADO");
@@ -73,9 +86,30 @@ public class ServicioProcesamientoImagenesImpl implements IServicioProcesamiento
                     if (resultado.getArchivosGenerados() != null) {
                         resultadosPorId.putAll(resultado.getArchivosGenerados());
                     }
+
+                    int procesadas = resultado.getRutasArchivosGenerados() == null
+                            ? totalImagenes
+                            : resultado.getRutasArchivosGenerados().size();
+                    procesadasPorLote.put(idTrabajo, Math.max(0, Math.min(totalImagenes, procesadas)));
+                }
+
+                if (repositorio instanceof RepositorioDatosJdbcImpl) {
+                    ((RepositorioDatosJdbcImpl) repositorio).registrarResultadosImagenes(
+                            idTrabajo,
+                            lote.getIdUsuario(),
+                            lote.getImagenes(),
+                            resultado.getRutasArchivosGenerados(),
+                            resultado.getArchivosGenerados(),
+                            "nodo-rmi",
+                            fechaRecepcion,
+                            fechaConversion
+                    );
                 }
             } else {
                 repositorio.actualizarEstadoTrabajo(idTrabajo, "ERROR");
+                synchronized (resultadosPorId) {
+                    procesadasPorLote.put(idTrabajo, 0);
+                }
             }
 
             repositorio.guardarLog(new RegistroLog("R-" + System.currentTimeMillis(), "INFO", "Resultado: " + resultado.getMensaje(), LocalDateTime.now().toString()));
@@ -100,7 +134,21 @@ public class ServicioProcesamientoImagenesImpl implements IServicioProcesamiento
         validarSesion(tokenSesion);
         for (RegistroTrabajo t : repositorio.obtenerHistorialUsuario(sesiones.get(tokenSesion))) {
             if (idLote.equals(t.getIdTrabajo())) {
-                return new EstadoLote(idLote, t.getEstado(), 0, 0);
+                int total;
+                int procesadas;
+                synchronized (resultadosPorId) {
+                    total = totalPorLote.getOrDefault(idLote, 0);
+                    procesadas = procesadasPorLote.getOrDefault(idLote, 0);
+
+                    if (total <= 0) {
+                        List<String> resultados = resultadosPorLote.get(idLote);
+                        if (resultados != null && !resultados.isEmpty()) {
+                            total = resultados.size();
+                            procesadas = resultados.size();
+                        }
+                    }
+                }
+                return new EstadoLote(idLote, t.getEstado(), total, procesadas);
             }
         }
         return new EstadoLote(idLote, "NO_ENCONTRADO", 0, 0);

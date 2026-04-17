@@ -45,9 +45,25 @@ CREATE TABLE IF NOT EXISTS procesamiento.logs (
     creado_en       TIMESTAMP NOT NULL DEFAULT NOW()
 );
 
+CREATE TABLE IF NOT EXISTS procesamiento.resultados_imagen (
+    id_resultado            BIGSERIAL PRIMARY KEY,
+    id_trabajo              VARCHAR(120) NOT NULL,
+    id_usuario              VARCHAR(120) NOT NULL,
+    indice_imagen           INTEGER NOT NULL,
+    nombre_original         VARCHAR(260) NOT NULL,
+    transformaciones        TEXT NOT NULL,
+    fecha_recepcion         TIMESTAMP NOT NULL,
+    fecha_conversion        TIMESTAMP NOT NULL,
+    nodo_procesador         VARCHAR(120) NOT NULL,
+    ruta_resultado          VARCHAR(260) NOT NULL,
+    tamano_resultado_bytes  INTEGER NOT NULL DEFAULT 0
+);
+
 CREATE INDEX IF NOT EXISTS idx_trabajos_usuario ON procesamiento.trabajos(id_usuario);
 CREATE INDEX IF NOT EXISTS idx_trabajos_estado ON procesamiento.trabajos(estado);
 CREATE INDEX IF NOT EXISTS idx_logs_fecha ON procesamiento.logs(fecha);
+CREATE INDEX IF NOT EXISTS idx_resultados_trabajo ON procesamiento.resultados_imagen(id_trabajo);
+CREATE UNIQUE INDEX IF NOT EXISTS uq_resultados_trabajo_indice ON procesamiento.resultados_imagen(id_trabajo, indice_imagen);
 
 INSERT INTO auth.usuarios (id_usuario, nombres, apellidos, cedula, correo, password)
 VALUES

@@ -39,17 +39,38 @@ async function getJson<T>(path: string, params?: Record<string, string>): Promis
   return (await response.json()) as T;
 }
 
+async function postJson<T>(path: string, body: Record<string, string>): Promise<T> {
+  const response = await fetch(`${BASE_URL}${path}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+
+  if (!response.ok) {
+    let message = 'Error de servidor';
+    try {
+      const payload = (await response.json()) as { error?: string };
+      message = payload.error || message;
+    } catch {
+      // ignore parse errors
+    }
+    throw new Error(message);
+  }
+
+  return (await response.json()) as T;
+}
+
 export const api = {
   health: () => getJson<{ ok: boolean; mensaje: string }>('/health'),
   login: (usuario: string, password: string) =>
-    getJson<LoginResponse>('/login', { usuario, password }),
+    postJson<LoginResponse>('/login', { usuario, password }),
   register: (payload: {
     nombres: string;
     apellidos: string;
     cedula: string;
     correo: string;
     password: string;
-  }) => getJson<RegisterResponse>('/registro', payload),
+  }) => postJson<RegisterResponse>('/registro', payload),
   logout: (token: string) => getJson<{ ok: boolean; mensaje: string }>('/logout', { token }),
   sendBatch: (token: string, usuario: string, cantidad: number) =>
     getJson<SendBatchResponse>('/enviarLote', {

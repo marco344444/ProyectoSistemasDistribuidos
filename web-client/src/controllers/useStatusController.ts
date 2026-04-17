@@ -52,7 +52,10 @@ export function useStatusController() {
   }, [refreshEstado, refreshMetricas]);
 
   const progreso = useMemo(() => {
-    if (!estado || estado.total <= 0) return 0;
+    if (!estado) return 0;
+    if (estado.total <= 0) {
+      return estado.estado === 'COMPLETADO' ? 100 : 0;
+    }
     return Math.round((estado.procesadas / estado.total) * 100);
   }, [estado]);
 
