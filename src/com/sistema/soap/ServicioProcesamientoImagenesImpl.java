@@ -6,27 +6,35 @@ import com.sistema.cliente.servicio.IServicioProcesamientoImagenes;
 import com.sistema.cliente.servicio.RegistroLog;
 import com.sistema.cliente.servicio.RegistroTrabajo;
 import com.sistema.cliente.servicio.RequestLote;
-import com.sistema.rest.RepositorioDatosJdbcImpl;
 import com.sistema.distribuido.nodos.INodoTrabajador;
 import com.sistema.distribuido.nodos.ResultadoProcesamiento;
 import com.sistema.distribuido.nodos.Trabajo;
-
+import com.sistema.model.Archivo;
+import com.sistema.rest.RepositorioDatosJdbcImpl;
 import java.io.ByteArrayOutputStream;
 import java.nio.charset.StandardCharsets;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipOutputStream;
 
 public class ServicioProcesamientoImagenesImpl implements IServicioProcesamientoImagenes {
 
     private final IRepositorioDatos repositorio;
-    private final INodoTrabajador nodoTrabajador;
+    private final List<INodoTrabajador> nodosTrabajadores;
+    private final ExecutorService procesadorLotes;
+    private final AtomicInteger siguienteNodoIdx = new AtomicInteger(0);
     private final Map<String, String> sesiones = new HashMap<>();
     private final Map<String, byte[]> resultadosPorId = new LinkedHashMap<>();
     private final Map<String, List<String>> resultadosPorLote = new LinkedHashMap<>();
@@ -37,8 +45,16 @@ public class ServicioProcesamientoImagenesImpl implements IServicioProcesamiento
     private final Map<String, LocalDateTime> fechaRecepcionPorLote = new LinkedHashMap<>();
 
     public ServicioProcesamientoImagenesImpl(IRepositorioDatos repositorio, INodoTrabajador nodoTrabajador) {
-        this.repositorio = repositorio;
-        this.nodoTrabajador = nodoTrabajador;
+        this(repositorio, Collections.singletonList(nodoTrabajador));
+    }
+
+    public ServicioProcesamientoImagenesImpl(IRepositorioDatos repositorio, List<INodoTrabajador> nodosTrabajadores) {
+        this.repositorio = Objects.requireNonNull(repositorio, "repositorio no puede ser null");
+        if (nodosTrabajadores == null || nodosTrabajadores.isEmpty()) {
+            throw new IllegalArgumentException("Debe existir al menos un nodo trabajador");
+        }
+        this.nodosTrabajadores = new ArrayList<>(nodosTrabajadores);
+        this.procesadorLotes = Executors.newFixedThreadPool(Math.max(4, this.nodosTrabajadores.size()));
     }
 
     @Override
@@ -53,7 +69,6 @@ public class ServicioProcesamientoImagenesImpl implements IServicioProcesamiento
     public String enviarLoteProcesamiento(String tokenSesion, RequestLote lote) {
         validarSesion(tokenSesion);
         String idTrabajo = "JOB-" + UUID.randomUUID();
-        long inicio = System.currentTimeMillis();
         LocalDateTime fechaRecepcion = LocalDateTime.now();
         int totalImagenes = (lote.getImagenes() == null) ? 0 : lote.getImagenes().size();
 
@@ -64,66 +79,17 @@ public class ServicioProcesamientoImagenesImpl implements IServicioProcesamiento
             totalPorLote.put(idTrabajo, totalImagenes);
             procesadasPorLote.put(idTrabajo, 0);
             fechaRecepcionPorLote.put(idTrabajo, fechaRecepcion);
+            resultadosPorLote.put(idTrabajo, new ArrayList<>());
+            logsPorLote.put(idTrabajo, new ArrayList<>());
+            duracionPorLoteMs.put(idTrabajo, 0L);
         }
-
-        Trabajo trabajo = new Trabajo();
-        trabajo.setIdTrabajo(idTrabajo);
-        trabajo.setImagenes(lote.getImagenes());
-        trabajo.setRutaEntrada("/tmp/entrada/" + idTrabajo);
-        trabajo.setRutaSalida("/tmp/salida/" + idTrabajo);
 
         try {
             repositorio.actualizarEstadoTrabajo(idTrabajo, "EN_PROCESO");
-            System.out.println("[Backend] Backend envía trabajo a nodo");
-            ResultadoProcesamiento resultado = nodoTrabajador.procesarTrabajo(trabajo);
-            LocalDateTime fechaConversion = LocalDateTime.now();
-
-            if (resultado.isExito()) {
-                repositorio.actualizarEstadoTrabajo(idTrabajo, "COMPLETADO");
-                synchronized (resultadosPorId) {
-                    resultadosPorLote.put(idTrabajo, new ArrayList<>(resultado.getRutasArchivosGenerados()));
-                    logsPorLote.put(idTrabajo, new ArrayList<>(resultado.getLogsGenerados()));
-                    if (resultado.getArchivosGenerados() != null) {
-                        resultadosPorId.putAll(resultado.getArchivosGenerados());
-                    }
-
-                    int procesadas = resultado.getRutasArchivosGenerados() == null
-                            ? totalImagenes
-                            : resultado.getRutasArchivosGenerados().size();
-                    procesadasPorLote.put(idTrabajo, Math.max(0, Math.min(totalImagenes, procesadas)));
-                }
-
-                if (repositorio instanceof RepositorioDatosJdbcImpl) {
-                    ((RepositorioDatosJdbcImpl) repositorio).registrarResultadosImagenes(
-                            idTrabajo,
-                            lote.getIdUsuario(),
-                            lote.getImagenes(),
-                            resultado.getRutasArchivosGenerados(),
-                            resultado.getArchivosGenerados(),
-                            "nodo-rmi",
-                            fechaRecepcion,
-                            fechaConversion
-                    );
-                }
-            } else {
-                repositorio.actualizarEstadoTrabajo(idTrabajo, "ERROR");
-                synchronized (resultadosPorId) {
-                    procesadasPorLote.put(idTrabajo, 0);
-                }
-            }
-
-            repositorio.guardarLog(new RegistroLog("R-" + System.currentTimeMillis(), "INFO", "Resultado: " + resultado.getMensaje(), LocalDateTime.now().toString()));
+            iniciarProcesamientoAsincrono(idTrabajo, lote, fechaRecepcion);
         } catch (Exception e) {
             repositorio.actualizarEstadoTrabajo(idTrabajo, "ERROR");
             repositorio.guardarLog(new RegistroLog("R-" + System.currentTimeMillis(), "ERROR", "Fallo RMI: " + e.getMessage(), LocalDateTime.now().toString()));
-        } finally {
-            long duracion = Math.max(0L, System.currentTimeMillis() - inicio);
-            synchronized (resultadosPorId) {
-                duracionPorLoteMs.put(idTrabajo, duracion);
-                if (!logsPorLote.containsKey(idTrabajo)) {
-                    logsPorLote.put(idTrabajo, new ArrayList<>());
-                }
-            }
         }
 
         return idTrabajo;
@@ -242,6 +208,251 @@ public class ServicioProcesamientoImagenesImpl implements IServicioProcesamiento
     private void validarSesion(String tokenSesion) {
         if (!sesiones.containsKey(tokenSesion)) {
             throw new IllegalArgumentException("Sesion invalida");
+        }
+    }
+
+    private INodoTrabajador seleccionarNodo() {
+        int idx = Math.floorMod(siguienteNodoIdx.getAndIncrement(), nodosTrabajadores.size());
+        return nodosTrabajadores.get(idx);
+    }
+
+    private void iniciarProcesamientoAsincrono(String idTrabajo, RequestLote lote, LocalDateTime fechaRecepcion) {
+        CompletableFuture.runAsync(() -> procesarLoteEnSegundoPlano(idTrabajo, lote, fechaRecepcion), procesadorLotes);
+    }
+
+    private void procesarLoteEnSegundoPlano(String idTrabajo, RequestLote lote, LocalDateTime fechaRecepcion) {
+        long inicio = System.currentTimeMillis();
+        LocalDateTime fechaConversion = fechaRecepcion;
+        List<Archivo> imagenes = lote.getImagenes() == null
+                ? Collections.emptyList()
+                : lote.getImagenes();
+
+        if (imagenes.isEmpty()) {
+            repositorio.actualizarEstadoTrabajo(idTrabajo, "COMPLETADO");
+            synchronized (resultadosPorId) {
+                duracionPorLoteMs.put(idTrabajo, 0L);
+            }
+            return;
+        }
+
+        int totalImagenes = imagenes.size();
+        int tamanoBloque = calcularTamanoBloque(totalImagenes);
+        List<List<Archivo>> bloques = particionarImagenes(imagenes, tamanoBloque);
+        AtomicInteger procesadas = new AtomicInteger(0);
+        AtomicInteger bloquesFallidos = new AtomicInteger(0);
+        List<CompletableFuture<ResultadoBloque>> tareas = new ArrayList<>();
+
+        for (int i = 0; i < bloques.size(); i++) {
+            final int bloqueIdx = i + 1;
+            final List<Archivo> bloque = bloques.get(i);
+            CompletableFuture<ResultadoBloque> tarea = CompletableFuture
+                    .supplyAsync(() -> procesarBloque(idTrabajo, bloque, bloqueIdx), procesadorLotes)
+                    .thenApply(resultado -> {
+                        if (!resultado.exito) {
+                            bloquesFallidos.incrementAndGet();
+                        }
+                        int procesadasActuales = Math.min(totalImagenes, procesadas.addAndGet(resultado.procesadas));
+                        sincronizarResultadoParcial(idTrabajo, resultado, procesadasActuales, inicio);
+                        return resultado;
+                    });
+            tareas.add(tarea);
+        }
+
+        CompletableFuture.allOf(tareas.toArray(CompletableFuture[]::new)).join();
+
+        List<String> rutasFinales = new ArrayList<>();
+        List<String> logsFinales = new ArrayList<>();
+        Map<String, byte[]> archivosFinales = new LinkedHashMap<>();
+        for (CompletableFuture<ResultadoBloque> tarea : tareas) {
+            ResultadoBloque resultado = tarea.join();
+            rutasFinales.addAll(resultado.rutas);
+            logsFinales.addAll(resultado.logs);
+            archivosFinales.putAll(resultado.archivos);
+            if (resultado.fechaConversion != null && resultado.fechaConversion.isAfter(fechaConversion)) {
+                fechaConversion = resultado.fechaConversion;
+            }
+        }
+
+        boolean exitoProcesamiento = bloquesFallidos.get() == 0;
+        boolean persistenciaExitosa = true;
+
+        try {
+            if (repositorio instanceof RepositorioDatosJdbcImpl) {
+                ((RepositorioDatosJdbcImpl) repositorio).registrarResultadosImagenes(
+                        idTrabajo,
+                        lote.getIdUsuario(),
+                        imagenes,
+                        rutasFinales,
+                        archivosFinales,
+                        "nodo-rmi-cluster",
+                        fechaRecepcion,
+                        fechaConversion
+                );
+            }
+        } catch (Exception e) {
+            persistenciaExitosa = false;
+            logsFinales.add("Error persistiendo resultados del lote: " + e.getMessage());
+        } finally {
+            synchronized (resultadosPorId) {
+                resultadosPorLote.put(idTrabajo, new ArrayList<>(rutasFinales));
+                logsPorLote.put(idTrabajo, new ArrayList<>(logsFinales));
+                resultadosPorId.putAll(archivosFinales);
+                procesadasPorLote.put(idTrabajo, Math.min(totalImagenes, procesadas.get()));
+                duracionPorLoteMs.put(idTrabajo, Math.max(0L, System.currentTimeMillis() - inicio));
+            }
+
+            try {
+                repositorio.actualizarEstadoTrabajo(idTrabajo, exitoProcesamiento ? "COMPLETADO" : "ERROR");
+            } catch (Exception e) {
+                synchronized (resultadosPorId) {
+                    logsPorLote.computeIfAbsent(idTrabajo, key -> new ArrayList<>())
+                            .add("No se pudo actualizar el estado final: " + e.getMessage());
+                }
+            }
+
+            try {
+                repositorio.guardarLog(new RegistroLog(
+                        "R-" + System.currentTimeMillis(),
+                        exitoProcesamiento ? "INFO" : "ERROR",
+                        "Resultado lote " + idTrabajo + ": " + (exitoProcesamiento ? "COMPLETADO" : "ERROR")
+                                + (persistenciaExitosa ? "" : " (persistencia parcial fallida)"),
+                        LocalDateTime.now().toString()
+                ));
+            } catch (Exception e) {
+                synchronized (resultadosPorId) {
+                    logsPorLote.computeIfAbsent(idTrabajo, key -> new ArrayList<>())
+                            .add("No se pudo guardar log final: " + e.getMessage());
+                }
+            }
+        }
+    }
+
+    private int calcularTamanoBloque(int totalImagenes) {
+        int base = (int) Math.ceil((double) totalImagenes / nodosTrabajadores.size());
+        return Math.max(2, base);
+    }
+
+    private List<List<Archivo>> particionarImagenes(List<Archivo> imagenes, int tamanoBloque) {
+        List<List<Archivo>> bloques = new ArrayList<>();
+        for (int i = 0; i < imagenes.size(); i += tamanoBloque) {
+            int fin = Math.min(imagenes.size(), i + tamanoBloque);
+            bloques.add(new ArrayList<>(imagenes.subList(i, fin)));
+        }
+        return bloques;
+    }
+
+    private ResultadoBloque procesarBloque(String idTrabajo, List<Archivo> bloque, int bloqueIdx) {
+        Exception ultimoError = null;
+        int intentosMaximos = Math.max(2, nodosTrabajadores.size());
+
+        for (int intento = 1; intento <= intentosMaximos; intento++) {
+            Trabajo trabajo = new Trabajo();
+            trabajo.setIdTrabajo(idTrabajo + "-BLOQUE-" + bloqueIdx + "-INT-" + intento);
+            trabajo.setImagenes(bloque);
+            trabajo.setRutaEntrada("/tmp/entrada/" + idTrabajo);
+            trabajo.setRutaSalida("/tmp/salida/" + idTrabajo);
+
+            try {
+                INodoTrabajador nodoSeleccionado = seleccionarNodo();
+                ResultadoProcesamiento resultado = nodoSeleccionado.procesarTrabajo(trabajo);
+                if (resultado == null || !resultado.isExito()) {
+                    ultimoError = new IllegalStateException("El nodo devolvio un resultado fallido para el bloque " + bloqueIdx);
+                    continue;
+                }
+
+                int procesadasBloque = resultado.getRutasArchivosGenerados() == null
+                        ? bloque.size()
+                        : Math.min(bloque.size(), resultado.getRutasArchivosGenerados().size());
+                return ResultadoBloque.ok(
+                        resultado.getRutasArchivosGenerados(),
+                        resultado.getLogsGenerados(),
+                        resultado.getArchivosGenerados(),
+                        procesadasBloque,
+                        LocalDateTime.now()
+                );
+            } catch (Exception e) {
+                ultimoError = e;
+            }
+        }
+
+        String mensaje = ultimoError == null
+                ? "Error RMI procesando bloque " + bloqueIdx
+                : "Error RMI procesando bloque " + bloqueIdx + ": " + ultimoError.getMessage();
+        return ResultadoBloque.error(mensaje, 0);
+    }
+
+    private void sincronizarResultadoParcial(
+            String idTrabajo,
+            ResultadoBloque parcial,
+            int procesadasActuales,
+            long inicio
+    ) {
+        synchronized (resultadosPorId) {
+            List<String> rutas = resultadosPorLote.get(idTrabajo);
+            if (rutas == null) {
+                rutas = new ArrayList<>();
+            }
+            rutas.addAll(parcial.rutas);
+            resultadosPorLote.put(idTrabajo, rutas);
+
+            List<String> logs = logsPorLote.get(idTrabajo);
+            if (logs == null) {
+                logs = new ArrayList<>();
+            }
+            logs.addAll(parcial.logs);
+            logsPorLote.put(idTrabajo, logs);
+
+            resultadosPorId.putAll(parcial.archivos);
+            procesadasPorLote.put(idTrabajo, procesadasActuales);
+            duracionPorLoteMs.put(idTrabajo, Math.max(0L, System.currentTimeMillis() - inicio));
+        }
+    }
+
+    private static class ResultadoBloque {
+        private final boolean exito;
+        private final List<String> rutas;
+        private final List<String> logs;
+        private final Map<String, byte[]> archivos;
+        private final int procesadas;
+        private final LocalDateTime fechaConversion;
+
+        private ResultadoBloque(
+                boolean exito,
+                List<String> rutas,
+                List<String> logs,
+                Map<String, byte[]> archivos,
+                int procesadas,
+                LocalDateTime fechaConversion
+        ) {
+            this.exito = exito;
+            this.rutas = rutas;
+            this.logs = logs;
+            this.archivos = archivos;
+            this.procesadas = procesadas;
+            this.fechaConversion = fechaConversion;
+        }
+
+        private static ResultadoBloque ok(
+                List<String> rutas,
+                List<String> logs,
+                Map<String, byte[]> archivos,
+                int procesadas,
+                LocalDateTime fechaConversion
+        ) {
+            return new ResultadoBloque(
+                    true,
+                    rutas == null ? new ArrayList<>() : new ArrayList<>(rutas),
+                    logs == null ? new ArrayList<>() : new ArrayList<>(logs),
+                    archivos == null ? new LinkedHashMap<>() : new LinkedHashMap<>(archivos),
+                    Math.max(0, procesadas),
+                    fechaConversion
+            );
+        }
+
+        private static ResultadoBloque error(String mensaje, int procesadas) {
+            List<String> logs = new ArrayList<>();
+            logs.add(mensaje);
+            return new ResultadoBloque(false, new ArrayList<>(), logs, new LinkedHashMap<>(), Math.max(0, procesadas), LocalDateTime.now());
         }
     }
 }

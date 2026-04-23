@@ -17,7 +17,17 @@ export function StatusView() {
           actions={
             <>
               <button className="btn-secondary" onClick={() => navigate('/upload')}>Volver</button>
-              <span className={controller.uiEstado.className}>{controller.uiEstado.label}</span>
+              {controller.estado?.estado === 'COMPLETADO' ? (
+                <button
+                  className={`${controller.uiEstado.className} status-badge-button`}
+                  onClick={() => navigate('/download')}
+                  title="Ir a Descargas"
+                >
+                  {controller.uiEstado.label}
+                </button>
+              ) : (
+                <span className={controller.uiEstado.className}>{controller.uiEstado.label}</span>
+              )}
             </>
           }
         />
@@ -53,7 +63,6 @@ export function StatusView() {
                 <div className="consumo-item"><div className="consumo-label">TRABAJOS</div><div className="consumo-val">{controller.metricas?.nodo.trabajosProcesados ?? '-'}</div></div>
                 <div className="consumo-item"><div className="consumo-label">REPLICA BD</div><div className="consumo-val">{controller.metricas?.replica.consistente ? 'OK' : 'N/A'}</div></div>
               </div>
-              <div className="consumo-live">Actualizacion automatica cada 5s</div>
             </div>
 
             <div className="consumo-card">

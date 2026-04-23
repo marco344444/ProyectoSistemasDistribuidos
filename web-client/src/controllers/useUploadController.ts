@@ -44,10 +44,7 @@ export function useUploadController() {
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState('');
   const [files, setFiles] = useState<File[]>([]);
-  const [transformacionesSeleccionadas, setTransformacionesSeleccionadas] = useState<string[]>([
-    'ESCALA_GRISES',
-    'ROTAR',
-  ]);
+  const [transformacionesSeleccionadas, setTransformacionesSeleccionadas] = useState<string[]>([]);
 
   const maxCantidad = useMemo(() => {
     if (files.length === 0) return MAX_FILES_PER_BATCH;
@@ -109,7 +106,7 @@ export function useUploadController() {
 
   const onSendBatch = async () => {
     const token = storage.getToken();
-    const usuario = storage.getUser() || 'usuario-demo';
+    const usuario = storage.getUser() || 'usuario';
 
     if (!token) {
       setMessage('No hay sesion activa. Vuelve al login.');
@@ -119,6 +116,11 @@ export function useUploadController() {
 
     const clampedCantidad = Math.max(1, Math.min(MAX_FILES_PER_BATCH, Math.floor(cantidad || files.length || 1)));
     const selectedFiles = files.slice(0, clampedCantidad);
+
+    if (selectedFiles.length === 0) {
+      setMessage('Debes cargar al menos una imagen real para enviar el lote.');
+      return;
+    }
 
     if (selectedFiles.length > 0) {
       const totalBytes = selectedFiles.reduce((acc, file) => acc + file.size, 0);
@@ -133,9 +135,7 @@ export function useUploadController() {
     setMessage('');
 
     try {
-      const response = selectedFiles.length > 0
-        ? await api.sendBatchWithFiles(token, usuario, selectedFiles, transformacionesSeleccionadas)
-        : await api.sendBatch(token, usuario, clampedCantidad);
+      const response = await api.sendBatchWithFiles(token, usuario, selectedFiles, transformacionesSeleccionadas);
       storage.setBatchId(response.idLote);
       navigate('/status');
     } catch (error) {
@@ -161,9 +161,6 @@ export function useUploadController() {
     onToggleTransformacion: (key: string) => {
       setTransformacionesSeleccionadas((prev) => {
         if (prev.includes(key)) {
-          if (prev.length === 1) {
-            return prev;
-          }
           return prev.filter((value) => value !== key);
         }
         return [...prev, key];

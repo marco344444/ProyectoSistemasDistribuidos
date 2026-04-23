@@ -10,20 +10,20 @@ export function LoginView() {
         <div className="auth-info">
           <div className="auth-badge">
             <span className="auth-badge-dot" />
-            Sistema distribuido activo
+            Procesamiento activo
           </div>
           <h1 className="auth-headline">
             Procesa imagenes
             <br />a <span>escala masiva</span>
           </h1>
           <p className="auth-desc">
-            Plataforma distribuida con SOAP, REST y RMI para lotes de imagenes.
+            Plataforma para procesar lotes de imagenes de forma rapida y segura.
           </p>
         </div>
 
         <div className="auth-card">
           <div className="card-title">Bienvenido</div>
-          <div className="card-sub">Cliente React + TypeScript con arquitectura MVC</div>
+          <div className="card-sub">Gestiona tus lotes y resultados desde un solo lugar</div>
 
           <div className="tabs">
             <button className={`tab ${controller.tab === 'login' ? 'active' : ''}`} onClick={() => controller.setTab('login')} type="button">

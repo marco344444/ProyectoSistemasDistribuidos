@@ -42,7 +42,7 @@ export function UploadView() {
 
             <div className="section-label">IMAGENES CARGADAS ({controller.files.length})</div>
             <div className="image-list">
-              {controller.files.slice(0, 8).map((file, index) => (
+              {controller.files.map((file, index) => (
                 <div key={`${file.name}-${index}`} className="image-card selected">
                   <div className="img-header">
                     <div className="img-name">

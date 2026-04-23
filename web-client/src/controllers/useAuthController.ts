@@ -13,8 +13,8 @@ export function useAuthController() {
   const [isError, setIsError] = useState(false);
   const [loading, setLoading] = useState(false);
 
-  const [loginEmail, setLoginEmail] = useState('admin@imageproc.com');
-  const [loginPassword, setLoginPassword] = useState('admin123');
+  const [loginEmail, setLoginEmail] = useState('');
+  const [loginPassword, setLoginPassword] = useState('');
 
   const [nombres, setNombres] = useState('');
   const [apellidos, setApellidos] = useState('');
@@ -30,7 +30,7 @@ export function useAuthController() {
     try {
       const data = await api.login(loginEmail.trim(), loginPassword.trim());
       storage.setToken(data.token);
-      storage.setUser(data.usuario || loginEmail.trim());
+      storage.setUser(data.nombre?.trim() || data.usuario || loginEmail.trim());
       navigate('/upload');
     } catch (error) {
       setIsError(true);

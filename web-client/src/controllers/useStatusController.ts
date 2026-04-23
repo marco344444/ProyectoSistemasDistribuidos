@@ -39,13 +39,16 @@ export function useStatusController() {
   }, [token]);
 
   useEffect(() => {
-    refreshEstado();
-    refreshMetricas();
+    const initialRefresh = window.setTimeout(() => {
+      refreshEstado();
+      refreshMetricas();
+    }, 0);
 
     const estadoTimer = window.setInterval(refreshEstado, 1000);
-    const metricasTimer = window.setInterval(refreshMetricas, 5000);
+    const metricasTimer = window.setInterval(refreshMetricas, 50);
 
     return () => {
+      window.clearTimeout(initialRefresh);
       window.clearInterval(estadoTimer);
       window.clearInterval(metricasTimer);
     };

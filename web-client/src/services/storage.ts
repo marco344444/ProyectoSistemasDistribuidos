@@ -1,6 +1,7 @@
 const TOKEN_KEY = 'tokenSesion';
 const USER_KEY = 'usuarioSesion';
 const BATCH_KEY = 'idLoteActual';
+const THEME_KEY = 'temaUI';
 
 export const storage = {
   getToken: () => localStorage.getItem(TOKEN_KEY) || '',
@@ -14,4 +15,7 @@ export const storage = {
   getBatchId: () => localStorage.getItem(BATCH_KEY) || '',
   setBatchId: (value: string) => localStorage.setItem(BATCH_KEY, value),
   clearBatchId: () => localStorage.removeItem(BATCH_KEY),
+
+  getTheme: () => localStorage.getItem(THEME_KEY) || '',
+  setTheme: (value: 'dark' | 'light') => localStorage.setItem(THEME_KEY, value),
 };

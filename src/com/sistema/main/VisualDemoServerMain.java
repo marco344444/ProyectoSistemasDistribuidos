@@ -4,6 +4,7 @@ import com.sistema.cliente.servicio.EstadoLote;
 import com.sistema.cliente.servicio.IRepositorioDatos;
 import com.sistema.cliente.servicio.InfoNodo;
 import com.sistema.cliente.servicio.RequestLote;
+import com.sistema.distribuido.nodos.INodoTrabajador;
 import com.sistema.model.Archivo;
 import com.sistema.model.TipoTransformacion;
 import com.sistema.rest.RepositorioDatosFactory;
@@ -66,9 +67,6 @@ public class VisualDemoServerMain {
                 registry = LocateRegistry.getRegistry(1099);
             }
 
-            NodoTrabajadorImpl nodoVisual = new NodoTrabajadorImpl("worker-visual");
-            registry.rebind(ServidorRmiMain.NOMBRE_BIND, nodoVisual);
-
             IRepositorioDatos repositorio = RepositorioDatosFactory.crearRepositorio();
             if (!(repositorio instanceof RepositorioDatosJdbcImpl)) {
                 throw new IllegalStateException("Este servidor visual requiere PostgreSQL/JDBC activo (DB_URL, DB_USER, DB_PASSWORD)");
@@ -79,12 +77,31 @@ public class VisualDemoServerMain {
             dbPassword = leerConfiguracion("DB_PASSWORD", "db.password", "imageproc123");
             validarConexionBaseDatos();
 
-            repositorio.registrarNodo(new InfoNodo("worker-visual", "localhost", 1099, true));
+            int cantidadNodos = leerCantidadNodos();
+            List<INodoTrabajador> nodosActivos = new ArrayList<>();
+            List<NodoTrabajadorImpl> nodosLocales = new ArrayList<>();
+            List<String> idsNodos = new ArrayList<>();
+            for (int i = 1; i <= cantidadNodos; i++) {
+                String idNodo = String.format("worker-%02d", i);
+                String nombreBind = ServidorRmiMain.NOMBRE_BIND + "-" + i;
 
-            ServicioProcesamientoImagenesImpl soap = new ServicioProcesamientoImagenesImpl(
-                    repositorio,
-                    (com.sistema.distribuido.nodos.INodoTrabajador) registry.lookup(ServidorRmiMain.NOMBRE_BIND)
-            );
+                NodoTrabajadorImpl nodo = new NodoTrabajadorImpl(idNodo);
+                registry.rebind(nombreBind, nodo);
+                if (i == 1) {
+                    // Mantiene compatibilidad con el bind historico.
+                    registry.rebind(ServidorRmiMain.NOMBRE_BIND, nodo);
+                }
+
+                repositorio.registrarNodo(new InfoNodo(idNodo, "localhost", 1099, true));
+                nodosActivos.add((INodoTrabajador) registry.lookup(nombreBind));
+                nodosLocales.add(nodo);
+                idsNodos.add(idNodo);
+            }
+
+            String nodosDescripcion = String.join(",", idsNodos);
+            System.out.println("[Backend] Nodos levantados: " + nodosDescripcion);
+
+            ServicioProcesamientoImagenesImpl soap = new ServicioProcesamientoImagenesImpl(repositorio, nodosActivos);
 
             HttpServer httpServer = HttpServer.create(new InetSocketAddress(8080), 0);
 
@@ -217,19 +234,13 @@ public class VisualDemoServerMain {
                 loteDemo.idLote = idLote;
                 loteDemo.usuario = usuario;
                 loteDemo.cantidad = cantidad;
-                loteDemo.estado = "COMPLETADO";
+                loteDemo.estado = "EN_PROCESO";
                 loteDemo.fecha = String.valueOf(System.currentTimeMillis());
-                loteDemo.nodos = "worker-visual";
-                loteDemo.duracionMs = soap.obtenerDuracionLoteMs(idLote);
-                loteDemo.archivos = soap.obtenerResultadosLote(idLote);
-                loteDemo.logs = soap.obtenerLogsLote(idLote);
+                loteDemo.nodos = nodosDescripcion;
+                loteDemo.duracionMs = 0;
+                loteDemo.archivos = new ArrayList<>();
+                loteDemo.logs = new ArrayList<>();
                 loteDemo.transformaciones = Arrays.asList("ESCALA_GRISES", "ROTAR");
-                if (loteDemo.archivos.isEmpty()) {
-                    loteDemo.archivos = new ArrayList<>();
-                    for (int i = 0; i < cantidad; i++) {
-                        loteDemo.archivos.add("imagen_edited_" + i + ".png");
-                    }
-                }
                 LOTES.add(loteDemo);
 
                 String json = "{\"idLote\":\"" + jsonEscape(idLote) + "\",\"cantidad\":" + cantidad + "}";
@@ -278,12 +289,12 @@ public class VisualDemoServerMain {
                     loteDemo.idLote = idLote;
                     loteDemo.usuario = usuario;
                     loteDemo.cantidad = archivos.size();
-                    loteDemo.estado = "COMPLETADO";
+                    loteDemo.estado = "EN_PROCESO";
                     loteDemo.fecha = String.valueOf(System.currentTimeMillis());
-                    loteDemo.nodos = "worker-visual";
-                    loteDemo.duracionMs = soap.obtenerDuracionLoteMs(idLote);
-                    loteDemo.archivos = soap.obtenerResultadosLote(idLote);
-                    loteDemo.logs = soap.obtenerLogsLote(idLote);
+                    loteDemo.nodos = nodosDescripcion;
+                    loteDemo.duracionMs = 0;
+                    loteDemo.archivos = new ArrayList<>();
+                    loteDemo.logs = new ArrayList<>();
                     loteDemo.transformaciones = obtenerTransformacionesLote(archivos);
                     LOTES.add(loteDemo);
 
@@ -315,6 +326,7 @@ public class VisualDemoServerMain {
 
                 EstadoLote estado = soap.consultarEstadoLote(token, idLote);
                 LoteDemo lote = buscarLoteUsuario(idLote, usuarioActual);
+                sincronizarLoteDemoConServicio(soap, lote, estado);
                 int totalImagenes = estado.getTotalImagenes();
                 int procesadas = estado.getProcesadas();
 
@@ -355,6 +367,12 @@ public class VisualDemoServerMain {
                 List<LoteDemo> filtrados = new ArrayList<>();
                 for (LoteDemo lote : LOTES) {
                     if (usuario.equals(lote.usuario)) {
+                        try {
+                            EstadoLote estadoLote = soap.consultarEstadoLote(token, lote.idLote);
+                            sincronizarLoteDemoConServicio(soap, lote, estadoLote);
+                        } catch (Exception e) {
+                            // Si falla una lectura puntual, mantener ultimo estado conocido.
+                        }
                         filtrados.add(lote);
                     }
                 }
@@ -547,7 +565,23 @@ public class VisualDemoServerMain {
                 Runtime runtime = Runtime.getRuntime();
                 long memoriaUsadaMb = (runtime.totalMemory() - runtime.freeMemory()) / (1024 * 1024);
 
-                Map<String, Object> metricasNodo = nodoVisual.obtenerMetricasConsumo();
+                int trabajosProcesados = 0;
+                int imagenesProcesadas = 0;
+                int maxHilosParalelos = 0;
+                int cargaAcumulada = 0;
+                long sumaTiempos = 0;
+
+                for (NodoTrabajadorImpl nodo : nodosLocales) {
+                    Map<String, Object> metricasNodo = nodo.obtenerMetricasConsumo();
+                    trabajosProcesados += (int) metricasNodo.get("trabajosProcesados");
+                    imagenesProcesadas += (int) metricasNodo.get("imagenesProcesadas");
+                    maxHilosParalelos = Math.max(maxHilosParalelos, (int) metricasNodo.get("maxHilosParalelos"));
+                    cargaAcumulada += (int) metricasNodo.get("cargaActual");
+                    sumaTiempos += (long) metricasNodo.get("tiempoPromedioMs");
+                }
+
+                int tiempoPromedioMs = nodosLocales.isEmpty() ? 0 : (int) (sumaTiempos / nodosLocales.size());
+                int cargaPromedio = nodosLocales.isEmpty() ? 0 : (int) Math.round((double) cargaAcumulada / nodosLocales.size());
                 Map<String, Object> replica = obtenerMetricasReplica(repositorio);
 
                 String json = "{"
@@ -557,12 +591,12 @@ public class VisualDemoServerMain {
                         + "\"cpuNuclei\":" + runtime.availableProcessors() + ","
                         + "\"memoriaUsadaMb\":" + memoriaUsadaMb + ","
                         + "\"nodo\":{"
-                        + "\"id\":\"" + jsonEscape(String.valueOf(metricasNodo.get("idNodo"))) + "\","
-                        + "\"trabajosProcesados\":" + metricasNodo.get("trabajosProcesados") + ","
-                        + "\"imagenesProcesadas\":" + metricasNodo.get("imagenesProcesadas") + ","
-                        + "\"tiempoPromedioMs\":" + metricasNodo.get("tiempoPromedioMs") + ","
-                        + "\"maxHilosParalelos\":" + metricasNodo.get("maxHilosParalelos") + ","
-                        + "\"cargaActual\":" + metricasNodo.get("cargaActual")
+                        + "\"id\":\"cluster-" + nodosLocales.size() + "\","
+                        + "\"trabajosProcesados\":" + trabajosProcesados + ","
+                        + "\"imagenesProcesadas\":" + imagenesProcesadas + ","
+                        + "\"tiempoPromedioMs\":" + tiempoPromedioMs + ","
+                        + "\"maxHilosParalelos\":" + maxHilosParalelos + ","
+                        + "\"cargaActual\":" + cargaPromedio
                         + "},"
                         + "\"replica\":{\"nodosPrimario\":" + replica.get("nodosPrimario")
                         + ",\"nodosReplica\":" + replica.get("nodosReplica")
@@ -639,6 +673,20 @@ public class VisualDemoServerMain {
         return null;
     }
 
+    private static void sincronizarLoteDemoConServicio(
+            ServicioProcesamientoImagenesImpl soap,
+            LoteDemo lote,
+            EstadoLote estado
+    ) {
+        if (soap == null || lote == null || estado == null) {
+            return;
+        }
+        lote.estado = estado.getEstado();
+        lote.duracionMs = soap.obtenerDuracionLoteMs(lote.idLote);
+        lote.archivos = soap.obtenerResultadosLote(lote.idLote);
+        lote.logs = soap.obtenerLogsLote(lote.idLote);
+    }
+
     private static boolean usuarioPuedeDescargarResultado(String usuario, String idResultado) {
         for (LoteDemo lote : LOTES) {
             if (!usuario.equals(lote.usuario)) {
@@ -651,6 +699,12 @@ public class VisualDemoServerMain {
             }
         }
         return false;
+    }
+
+    private static int leerCantidadNodos() {
+        String valorConfig = leerConfiguracion("WORKER_COUNT", "worker.count", "4");
+        int cantidad = parseInt(valorConfig, 4);
+        return Math.max(4, cantidad);
     }
 
     private static int parseInt(String value, int fallback) {

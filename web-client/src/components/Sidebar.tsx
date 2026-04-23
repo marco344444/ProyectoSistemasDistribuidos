@@ -17,10 +17,18 @@ export function Sidebar({ active }: Props) {
   const navigate = useNavigate();
   const [menuOpen, setMenuOpen] = useState(false);
   const [confirmLogout, setConfirmLogout] = useState(false);
+  const [theme, setTheme] = useState<'dark' | 'light'>(() => {
+    return storage.getTheme() === 'light' ? 'light' : 'dark';
+  });
   const menuRef = useRef<HTMLDivElement | null>(null);
 
   const usuario = storage.getUser();
   const initials = (usuario || 'IP').slice(0, 2).toUpperCase();
+
+  useEffect(() => {
+    document.documentElement.setAttribute('data-theme', theme);
+    storage.setTheme(theme);
+  }, [theme]);
 
   useEffect(() => {
     if (!menuOpen) {
@@ -75,7 +83,18 @@ export function Sidebar({ active }: Props) {
         <div className="logo-icon" />
         <div>
           <div className="logo-text">ImageProc</div>
-          <div className="logo-sub">Sistema Distribuido</div>
+          <button
+            type="button"
+            className="theme-toggle"
+            onClick={() => setTheme((prev) => (prev === 'dark' ? 'light' : 'dark'))}
+            aria-label={theme === 'dark' ? 'Activar modo claro' : 'Activar modo oscuro'}
+            title={theme === 'dark' ? 'Activar modo claro' : 'Activar modo oscuro'}
+          >
+            <span className="theme-toggle-track" aria-hidden="true">
+              <span className="theme-toggle-thumb" />
+            </span>
+            <span className="theme-toggle-label">{theme === 'dark' ? 'Modo claro' : 'Modo oscuro'}</span>
+          </button>
         </div>
       </div>
 
@@ -96,7 +115,7 @@ export function Sidebar({ active }: Props) {
           <div className="avatar">{initials}</div>
           <div>
             <div className="user-name">{usuario || 'Sin sesion'}</div>
-            <div className="user-role">Cliente web</div>
+            <div className="user-role">Usuario</div>
           </div>
         </button>
 

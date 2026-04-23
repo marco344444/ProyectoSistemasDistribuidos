@@ -67,7 +67,7 @@ export function DownloadView() {
                     <div className={`file-ext ${file.listo ? '' : 'dim'}`}>{ext}</div>
                     <div className="file-info">
                       <div className={`file-name ${file.listo ? '' : 'dim'}`}>{file.nombre}</div>
-                      <div className="file-meta">Resultado simulado <span className="file-size">{file.tamKb} KB</span></div>
+                      <div className="file-meta">Resultado disponible <span className="file-size">{file.tamKb} KB</span></div>
                     </div>
                     <span className={`chip ${file.listo ? 'chip-green' : 'chip-gray'}`}>{file.listo ? 'Lista' : 'Pendiente'}</span>
                     <button
